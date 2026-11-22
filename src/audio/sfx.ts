@@ -7,6 +7,8 @@ class Sfx {
   private hum: { osc: OscillatorNode; gain: GainNode } | null = null
   private alarmNext = 0
   private beepNext = 0
+  private hissNext = 0
+  private chirpNext = 0
   muted = false
 
   constructor() {
@@ -151,12 +153,26 @@ class Sfx {
   stamp() {
     this.noise(0.12, 0.5, 300, 0.8)
   }
+  impact() {
+    this.noise(0.5, 0.7, 160, 0.4)
+    this.tone(70, 0.4, 'square', 0.2, 35)
+    this.tone(2400, 0.15, 'triangle', 0.05, 900, 0.05)
+  }
+  rivet(n: number) {
+    this.noise(0.04, 0.3, 3500, 3)
+    this.tone(520 + n * 110, 0.08, 'square', 0.07)
+  }
+  pulse() {
+    this.tone(900, 0.5, 'sine', 0.15, 120)
+    this.tone(300, 0.5, 'sawtooth', 0.06, 1200)
+    this.noise(0.3, 0.2, 700, 2)
+  }
   delivered() {
     ;[392, 523, 659, 784].forEach((f, i) => this.tone(f, 0.25, 'triangle', 0.09, undefined, i * 0.1))
   }
 
   /** Continuous cues, called once per frame. */
-  update(now: number, s: { alarm: boolean; heat: number; engine: number }) {
+  update(now: number, s: { alarm: boolean; breach: boolean; agitation: number; heat: number; engine: number }) {
     const c = this.ctx
     if (!c || !this.master) return
     if (!this.hum) {
@@ -177,6 +193,15 @@ class Sfx {
     if (s.alarm && now >= this.alarmNext) {
       this.alarmNext = now + 900
       this.tone(620, 0.32, 'square', 0.045, 440)
+    }
+    if (s.breach && now >= this.hissNext) {
+      this.hissNext = now + 1100
+      this.noise(1.0, 0.06, 5200, 0.6)
+    }
+    if (s.agitation > 60 && now >= this.chirpNext) {
+      const k = (s.agitation - 60) / 40
+      this.chirpNext = now + 900 - k * 650
+      this.tone(380 + k * 300, 0.07, 'triangle', 0.05, 260)
     }
     if (s.heat > 55 && now >= this.beepNext) {
       const k = (s.heat - 55) / 45

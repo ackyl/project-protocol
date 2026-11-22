@@ -1,7 +1,7 @@
 // Owns the live snapshot, the fixed-step clock and all player input. React and
 // the canvas renderer both read from here; every change goes through the game's
 // validated `command` and `tick` functions.
-import { cargoIds, rules, type Floor } from '../game/content'
+import { cargoIds, rules, type Dir, type Floor } from '../game/content'
 import { atStop } from '../game/customs'
 import {
   canClimb,
@@ -38,6 +38,8 @@ export class Runner {
   private holds = new Map<string, Direction>()
   private vertical = new Map<string, Floor>()
   private pending: { cmd: Command; at: number } | null = null
+  /** Tutorial panels freeze the simulation and swallow game input. */
+  paused = false
   /** Presentation hook: true once the officer is in position to scan. */
   scanReady: () => boolean = () => true
   private resultAt = 0
@@ -67,11 +69,18 @@ export class Runner {
     this.frameSubs.add(fn)
     return () => void this.frameSubs.delete(fn)
   }
+  private lastPublish = 0
+  private urgent = false
+  /** Push state to React: immediately after discrete events, otherwise at most 10×/s. */
   private publish(now = performance.now()) {
     const g = this.game
     const scanning = !!this.pending
     const resultShown = g.phase === 'result' && now >= this.resultAt
-    if (g !== this.ui.game || scanning !== this.ui.scanning || resultShown !== this.ui.resultShown) {
+    const flags = scanning !== this.ui.scanning || resultShown !== this.ui.resultShown
+    if (!flags && !this.urgent && now - this.lastPublish < 100) return
+    if (g !== this.ui.game || flags) {
+      this.urgent = false
+      this.lastPublish = now
       this.ui = { game: g, scanning, resultShown }
       this.subs.forEach((f) => f())
     }
@@ -80,6 +89,7 @@ export class Runner {
     if (next === this.game) return false
     const events = diff(this.game, next)
     this.game = next
+    if (events.length) this.urgent = true
     for (const e of events) {
       if (e.type === 'outcome') this.resultAt = performance.now() + RESULT_DELAY[e.outcome]
       this.eventSubs.forEach((f) => f(e))
@@ -96,10 +106,11 @@ export class Runner {
       this.publish()
       return
     }
-    if (cmd.type === 'restart' && !this.ui.resultShown) return
+    if ((cmd.type === 'restart' || cmd.type === 'newRun') && !this.ui.resultShown) return
     const before = this.game
     if (this.apply(command(before, cmd))) {
-      if (cmd.type === 'restart' || cmd.type === 'accept') {
+      this.urgent = true
+      if (cmd.type === 'restart' || cmd.type === 'newRun' || cmd.type === 'accept') {
         this.prev = this.game
         this.target = null
       }
@@ -111,9 +122,10 @@ export class Runner {
   interact = () => {
     const g = this.game
     if (g.phase === 'contract') return this.send({ type: 'accept' })
-    if (g.phase === 'result') return this.send({ type: 'restart' })
+    if (g.phase === 'result') return this.send({ type: 'newRun' })
     if (g.phase === 'search') return this.send({ type: 'inspect' })
     if (g.repairTicks !== null) return this.send({ type: 'stop' })
+    if (g.patch !== null) return
     const a = nearest(g)
     if (a) {
       this.target = null
@@ -136,12 +148,13 @@ export class Runner {
   /** Walk somewhere (and optionally act on arrival). */
   goTo(t: Target) {
     if (!mobile(this.game)) return
-    if (this.game.repairTicks !== null) this.send({ type: 'leave' })
+    if (this.game.repairTicks !== null || this.game.patch !== null) this.send({ type: 'leave' })
     this.target = t
   }
 
   hold(id: string, dir: Direction) {
     if (dir) {
+      if (this.game.patch !== null) return
       this.target = null
       if (this.game.repairTicks !== null) this.send({ type: 'leave' })
       this.holds.delete(id)
@@ -155,6 +168,23 @@ export class Runner {
       this.vertical.set(id, to)
     }
   }
+  /** Fresh contract on a new route (leaving a training run). */
+  reset(seed: number) {
+    this.game = this.prev = initial(seed)
+    this.target = null
+    this.pending = null
+    this.eventSubs.forEach((f) => f({ type: 'restart' }))
+    this.urgent = true
+    this.publish()
+  }
+  pause(on: boolean) {
+    this.paused = on
+    this.holds.clear()
+    this.vertical.clear()
+    this.bank = 0
+    this.urgent = true
+    this.publish()
+  }
   releaseAll = () => {
     this.holds.clear()
     this.vertical.clear()
@@ -167,17 +197,21 @@ export class Runner {
   }
 
   // ── Loop ───────────────────────────────────────────────────────────────
+  /** One display frame: bank real time, run fixed steps, notify listeners. */
+  frame(now: number) {
+    const dt = Math.max(0, Math.min(now - this.last, rules.maxFrameMs))
+    this.last = now
+    if (typeof document === 'undefined' || !document.hidden) this.bank += dt
+    this.step(now)
+    this.frameSubs.forEach((f) => f(now, dt / 1000))
+  }
   start() {
     this.last = performance.now()
-    const frame = (now: number) => {
-      const dt = Math.max(0, Math.min(now - this.last, rules.maxFrameMs))
-      this.last = now
-      if (!document.hidden) this.bank += dt
-      this.step(now)
-      this.frameSubs.forEach((f) => f(now, dt / 1000))
-      this.raf = requestAnimationFrame(frame)
+    const loop = (now: number) => {
+      this.frame(now)
+      this.raf = requestAnimationFrame(loop)
     }
-    this.raf = requestAnimationFrame(frame)
+    this.raf = requestAnimationFrame(loop)
     window.addEventListener('blur', this.releaseAll)
     document.addEventListener('visibilitychange', this.releaseAll)
   }
@@ -195,7 +229,7 @@ export class Runner {
       this.apply(command(this.game, cmd))
     }
     const slice = 1000 / rules.hz
-    if (!mobile(this.game)) {
+    if (this.paused || !mobile(this.game)) {
       this.bank = 0
       this.prev = this.game
       this.alpha = 1
@@ -240,6 +274,18 @@ export class Runner {
     const onButton = (e.target as HTMLElement | null)?.closest?.('button')
     const move: Record<string, Direction> = { a: -1, arrowleft: -1, d: 1, arrowright: 1 }
     const ladder: Record<string, Floor> = { w: 1, arrowup: 1, s: 0, arrowdown: 0 }
+    if (this.paused) return false
+    if (mobile(g) && g.patch !== null) {
+      const rivet: Record<string, Dir> = {
+        w: 'up', arrowup: 'up', s: 'down', arrowdown: 'down', a: 'left', arrowleft: 'left', d: 'right', arrowright: 'right',
+      }
+      if (k in rivet) {
+        if (!e.repeat) this.send({ type: 'rivet', dir: rivet[k] })
+        return true
+      }
+      if (k === 'escape') return this.send({ type: 'leave' }), true
+      return k === 'e' || k === ' '
+    }
     if (mobile(g)) {
       if (k in move) {
         if (!e.repeat) this.hold(k, move[k])
@@ -264,10 +310,11 @@ export class Runner {
     if (g.phase === 'search') {
       if (k === 'e' || ((k === 'enter' || k === ' ') && !onButton)) return this.interact(), true
       if (k === 'b') return this.send({ type: 'bribe' }), true
-      if (k === '1' || k === '2') return this.surrenderIndex(+k - 1), true
+      if (k === '1' || k === '2' || k === '3') return this.surrenderIndex(+k - 1), true
     }
     if (g.phase === 'result' && (k === 'r' || ((k === 'enter' || k === ' ') && !onButton)))
-      return this.send({ type: 'restart' }), true
+      return this.send({ type: 'newRun' }), true
+    if (g.phase === 'result' && k === 't') return this.send({ type: 'restart' }), true
     return false
   }
   keyup = (e: KeyboardEvent) => {

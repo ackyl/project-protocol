@@ -5,8 +5,9 @@ import { actions } from '../app/interact'
 import { rules, ship, slots } from '../game/content'
 import { exposure, detection } from '../game/customs'
 import { command, initial, position, tick, type Game } from '../game/simulation'
+import { classic, SURGE } from './classic'
 
-const launch = () => command(initial(), { type: 'accept' })
+const launch = () => command(classic(initial()), { type: 'accept' })
 
 /** Drive the courier with the autopilot exactly as the live loop does. */
 function drive(g: Game, t: Target, limit = 600) {
@@ -82,7 +83,7 @@ describe('presentation events', () => {
     const stowed = command(g, { type: 'stow', slot: 'aft' })
     expect(diff(g, stowed)).toEqual([{ type: 'stow', id: 'cell', slot: 'aft' }])
     g = stowed
-    while (g.elapsed < rules.surge * rules.hz - 1) g = tick(g)
+    while (g.elapsed < SURGE - 1) g = tick(g)
     const surged = tick(g)
     const types = diff(g, surged).map((e) => e.type)
     expect(types).toContain('surge')
@@ -117,6 +118,7 @@ describe('presentation events', () => {
       phase: 'search',
       stop: 0,
       items: {
+        ...base.items,
         cell: { ...base.items.cell, location: { kind: 'slot', slot: 'aft' } },
         crate: { ...base.items.crate, location: { kind: 'slot', slot: 'vault' } },
       },

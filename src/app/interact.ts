@@ -1,4 +1,4 @@
-import { cargo, ship, slots, type Point } from '../game/content'
+import { breachSites, cargo, ship, slots, type Point } from '../game/content'
 import { contextActions, position, type Command, type Game } from '../game/simulation'
 
 export interface Action {
@@ -12,6 +12,8 @@ function describe(g: Game, cmd: Command): Action | undefined {
   if (cmd.type === 'stow')
     return { cmd, verb: 'Stow', noun: slots[cmd.slot].name, at: slots[cmd.slot] }
   if (cmd.type === 'repair') return { cmd, verb: 'Repair', noun: 'Power console', at: ship.station }
+  if (cmd.type === 'patch' && g.breach)
+    return { cmd, verb: 'Patch', noun: breachSites[g.breach.site].name, at: breachSites[g.breach.site] }
   if (cmd.type === 'pick') {
     const at = position(g, cmd.id)
     return at && { cmd, verb: g.items[cmd.id].location.kind === 'slot' ? 'Take' : 'Grab', noun: cargo[cmd.id].name, at }

@@ -57,7 +57,7 @@ export class Fx {
         glow: o.glow,
       })
     }
-    if (this.particles.length > 900) this.particles.splice(0, this.particles.length - 900)
+    if (this.particles.length > 160) this.particles.splice(0, this.particles.length - 160)
   }
   sparks(x: number, y: number, n = 10) {
     this.burst(x, y, n, { speed: 70, gravity: 160, max: 0.5, colors: ['#fff6c8', '#ffd24a', '#ff9a2a'], glow: true })
@@ -81,6 +81,12 @@ export class Fx {
   }
   say(text: string, x: number, y: number, now: number, color = '#ffffff', big = false) {
     this.floaters = this.floaters.filter((f) => now - f.born < 1400)
+    // Stack callouts that land on top of a recent one instead of overlapping.
+    for (let i = 0; i < 6; i++) {
+      const clash = this.floaters.some((f) => Math.abs(f.x - x) < 60 && Math.abs(f.y - y) < 12 && now - f.born < 900)
+      if (!clash) break
+      y -= 13
+    }
     this.floaters.push({ text, x, y, born: now, color, big })
   }
 

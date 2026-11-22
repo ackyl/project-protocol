@@ -22,6 +22,12 @@ A fast-paced, single-player sci-fi survival game about a disposable smuggler tra
 - Different failures have different consequences: arrest, ship damage, debt, and death. Do not collapse everything into a generic game-over screen.
 - First milestone: **one complete vertical slice**, from contract acceptance through highway hazard, customs inspection, delivery outcome, payout, and restart.
 
+## Decisions established in chunk 2 (FTUE and depth)
+- **First delivery is a guided training run.** Large panels pause the game to teach one system at a time, then the player demonstrates it in real play. The highway clock holds until the drills are done, and the gate, customs and settlement are real. Lessons the player already demonstrated are skipped. Training can be skipped and replayed.
+- **Three cargo, three slots.** The Bio Specimen joins the cell and crate. It pays most, needs containment (worst when loose, stirs in a rack when power is out) and its pulse blows rack latches and interrupts stations on its deck. The shield bay is always contested.
+- **Two emergency types with distinct repairs.** The power surge is a timing lock at a fixed console. The hull breach opens at one of several sites and is patched with an ordered rivet sequence. Wrong inputs cost hull.
+- **Seeded hazard director.** Every run has one surge and one impact. Timing, site and order come from the run seed. Hazards are either well separated or deliberately overlapped, never piled up at random. Runs are reproducible by route code.
+
 ## Gameplay pillars
 1. **Handle:** Transport and stabilize dangerous contraband in the ship's physical space.
 2. **Survive:** Decide between protecting cargo and responding to urgent ship problems.

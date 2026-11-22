@@ -7,9 +7,26 @@ import { useReserve } from './reserve'
 const hazard = {
   cell: 'Heats up when loose or carried. Vents at 100% — hull and cargo damage.',
   crate: 'Broadcasts a signal. Only the shield bay hides it from customs.',
+  specimen: 'Restless outside a cradle. Pulses blow latches and spoil it.',
 }
 
-export function Title({ runner, touch, muted, onMute }: { runner: Runner; touch: boolean; muted: boolean; onMute: () => void }) {
+export function Title({
+  runner,
+  touch,
+  muted,
+  onMute,
+  firstTime,
+  onTraining,
+  onSkipTraining,
+}: {
+  runner: Runner
+  touch: boolean
+  muted: boolean
+  onMute: () => void
+  firstTime: boolean
+  onTraining: () => void
+  onSkipTraining: () => void
+}) {
   const ticket = useRef<HTMLElement>(null)
   const wide = window.innerWidth >= window.innerHeight * 1.15
   useReserve(ticket, 'ticket', wide ? 'right' : 'bottom')
@@ -30,8 +47,8 @@ export function Title({ runner, touch, muted, onMute }: { runner: Runner; touch:
       </div>
       <section className={'ticket ' + (wide ? 'side' : 'bottom')} ref={ticket} aria-labelledby="job-title">
         <div className="ticket-head">
-          <span>SYNDICATE JOB</span>
-          <span>#071</span>
+          <span>{firstTime ? 'TRAINING RUN' : 'SYNDICATE JOB'}</span>
+          <span>ROUTE {runner.game.seed.toString(36).toUpperCase()}</span>
         </div>
         <h2 id="job-title">The Cinder Run</h2>
         <div className="leg">
@@ -40,7 +57,9 @@ export function Title({ runner, touch, muted, onMute }: { runner: Runner; touch:
           <b>Cinder Gate</b>
         </div>
         <p className="brief">
-          {rules.highway}s down the Ash Belt highway, then a customs search. Keep the hull in one piece and the freight out of sight.
+          {firstTime
+            ? 'First job? The clock waits while you learn each system, then the gate is real.'
+            : `${rules.highway}s down the Ash Belt. Expect a power surge and a hull impact — when and where depends on the route.`}
         </p>
         <ul className="freight">
           {cargoIds.map((id) => (
@@ -62,8 +81,11 @@ export function Title({ runner, touch, muted, onMute }: { runner: Runner; touch:
             Wallet <b>{rules.startingCash}¢</b>
           </span>
         </div>
-        <button className="go" onClick={() => runner.send({ type: 'accept' })} autoFocus>
-          Take the job {!touch && <kbd>E</kbd>}
+        <button className="go" onClick={firstTime ? onTraining : () => runner.send({ type: 'accept' })} autoFocus>
+          {firstTime ? 'Start training' : 'Take the job'} {!touch && <kbd>E</kbd>}
+        </button>
+        <button className="link" onClick={firstTime ? onSkipTraining : onTraining}>
+          {firstTime ? 'Skip training — I know the job' : 'Replay training'}
         </button>
         <div className="controls-hint">
           {touch ? (

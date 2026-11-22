@@ -22,6 +22,23 @@ export function TouchControls({ g, runner }: { g: Game; runner: Runner }) {
     onLostPointerCapture: (e: PointerEvent) => runner.hold('p' + e.pointerId, 0),
   })
   const repairing = g.repairTicks !== null
+  if (g.patch !== null)
+    return (
+      <div className={'touch ' + (portrait ? 'portrait' : 'landscape')} ref={ref}>
+        <div className="pad rivets">
+          {(['left', 'up', 'down', 'right'] as const).map((d) => (
+            <button key={d} aria-label={'Rivet ' + d} onClick={() => runner.send({ type: 'rivet', dir: d })}>
+              {{ left: '◀', up: '▲', down: '▼', right: '▶' }[d]}
+            </button>
+          ))}
+        </div>
+        <div className="acts">
+          <button className="small" onClick={() => runner.send({ type: 'leave' })}>
+            LEAVE
+          </button>
+        </div>
+      </div>
+    )
   const act = nearest(g)
   const held = heldItem(g)
   const up = canClimb(g, 1),

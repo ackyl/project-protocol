@@ -83,9 +83,14 @@ export function Ledger({ g, runner, touch }: { g: Game; runner: Runner; touch: b
           Syndicate reserve is {rules.debtTarget}¢. You are <b>{book.shortfall}¢ short</b>.
         </p>
       )}
-      <button className="go" onClick={() => runner.send({ type: 'restart' })} autoFocus>
-        Run it again {!touch && <kbd>R</kbd>}
-      </button>
+      <div className="ledger-actions">
+        <button className="go" onClick={() => runner.send({ type: 'newRun' })} autoFocus>
+          Next run {!touch && <kbd>R</kbd>}
+        </button>
+        <button className="link dark" onClick={() => runner.send({ type: 'restart' })}>
+          Replay this route {!touch && <kbd>T</kbd>}
+        </button>
+      </div>
     </section>
   )
 }

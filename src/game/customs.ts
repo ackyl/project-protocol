@@ -21,9 +21,12 @@ export function detection(g: Game, id: CargoId) {
   const loc = g.items[id].location
   if (!atStop(g, id)) return 0
   if (loc.kind !== 'slot') return 1
-  return !slots[loc.slot].shielded && cargo[id].kind === 'signal'
+  if (slots[loc.slot].shielded) return 0
+  return cargo[id].kind === 'signal'
     ? rules.signalRackChance
-    : 0
+    : cargo[id].kind === 'bio'
+      ? rules.bioRackChance
+      : 0
 }
 export function itemPayout(g: Game, id: CargoId) {
   return Math.round((cargo[id].value * g.items[id].condition) / 100)
@@ -33,7 +36,7 @@ export function ledger(g: Game) {
     g.outcome === 'delivered' && g.items[id].location.kind !== 'surrendered'
       ? itemPayout(g, id)
       : 0
-  const earnings = { cell: income('cell'), crate: income('crate') }
+  const earnings = Object.fromEntries(cargoIds.map((id) => [id, income(id)])) as Record<CargoId, number>
   const repairs =
     g.outcome === 'death' ? 0 : (rules.hull - g.hull) * rules.repairCostPerHull
   const penalty =
@@ -42,7 +45,7 @@ export function ledger(g: Game) {
       : g.outcome === 'death'
         ? rules.wreckFee
         : 0
-  const balance = g.cash + earnings.cell + earnings.crate - repairs - penalty
+  const balance = g.cash + cargoIds.reduce((n, id) => n + earnings[id], 0) - repairs - penalty
   return {
     earnings,
     repairs,
@@ -59,6 +62,7 @@ export function finish(g: Game, outcome: Outcome, note: string): Game {
     outcome,
     climb: null,
     repairTicks: null,
+    patch: null,
     note,
   }
 }

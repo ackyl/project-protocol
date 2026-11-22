@@ -99,15 +99,5 @@ export function hash(n: number) {
   return ((n ^ (n >>> 16)) >>> 0) / 4294967296
 }
 
-export function glow(c: Ctx, x: number, y: number, rad: number, color: string, alpha: number) {
-  if (alpha <= 0) return
-  const g = c.createRadialGradient(x, y, 0, x, y, rad)
-  g.addColorStop(0, color)
-  g.addColorStop(1, 'rgba(0,0,0,0)')
-  c.save()
-  c.globalCompositeOperation = 'lighter'
-  c.globalAlpha = Math.min(1, alpha)
-  c.fillStyle = g
-  c.fillRect(x - rad, y - rad, rad * 2, rad * 2)
-  c.restore()
-}
+/** Soft light halos were removed for performance; kept as a no-op hook. */
+export function glow(_c: Ctx, _x: number, _y: number, _rad: number, _color: string, _alpha: number) {}

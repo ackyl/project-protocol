@@ -8,6 +8,7 @@ import {
   type Floor,
 } from '../game/content'
 import { atStop, detection, ledger } from '../game/customs'
+import { classic, SURGE } from './classic'
 import {
   command,
   initial,
@@ -18,7 +19,7 @@ import {
 } from '../game/simulation'
 
 function flight(seed: number = rules.seed) {
-  let g = initial(seed)
+  let g = classic(initial(seed))
   const log: (Command | Direction)[] = []
   const send = (cmd: Command) => {
     log.push(cmd)
@@ -53,7 +54,7 @@ function flight(seed: number = rules.seed) {
   walk(slots.vault.x)
   send({ type: 'stow', slot: 'vault' })
   walk(slots.aft.x)
-  until(rules.surge * rules.hz)
+  until(SURGE)
   send({ type: 'pick', id: 'cell' })
   send({ type: 'stow', slot: 'aft' })
   climb(1)
@@ -100,7 +101,7 @@ describe('one-day delivery', () => {
     const g = run.state,
       book = ledger(g)
     expect(g.outcome).toBe('delivered')
-    expect(book.earnings).toEqual({ cell: 70, crate: 50 })
+    expect(book.earnings).toEqual({ cell: 70, crate: 50, specimen: 0 })
     expect(book.repairs).toBeGreaterThan(0)
     expect(book.balance).toBe(160 - book.repairs)
     expect(command(g, { type: 'restart' })).toEqual(initial())
@@ -111,7 +112,7 @@ describe('one-day delivery', () => {
       run.log.reduce<Game>(
         (g, input) =>
           typeof input === 'number' ? tick(g, input) : command(g, input),
-        initial(912),
+        classic(initial(912)),
       )
     expect(replay()).toEqual(run.state)
     expect(replay()).toEqual(replay())
@@ -137,7 +138,7 @@ describe('one-day delivery', () => {
       expect(command(g, cmd)).toBe(g)
     const arrested = command(g, { type: 'inspect' })
     expect(arrested.outcome).toBe('arrest')
-    expect(ledger(arrested).earnings).toEqual({ cell: 0, crate: 0 })
+    expect(ledger(arrested).earnings).toEqual({ cell: 0, crate: 0, specimen: 0 })
     expect(ledger(arrested).penalty).toBe(rules.impoundFee)
   })
   it('skips exactly one location per paid bribe and refuses an unaffordable bribe', () => {
@@ -157,7 +158,7 @@ describe('one-day delivery', () => {
     expect(g.stop).toBe(2)
     expect(g.items.cell.location.kind).toBe('surrendered')
     expect(command(g, { type: 'surrender', id: 'cell' })).toBe(g)
-    expect(ledger(clear(g)).earnings).toEqual({ cell: 0, crate: 50 })
+    expect(ledger(clear(g)).earnings).toEqual({ cell: 0, crate: 50, specimen: 0 })
   })
   it('uses seeded signal detection in an ordinary rack, including both outcomes', () => {
     const base = boarding()
@@ -186,6 +187,7 @@ describe('one-day delivery', () => {
       stop: 1,
       player: ship.station,
       items: {
+        ...base.items,
         cell: { ...base.items.cell, location: { kind: 'held' } },
         crate: {
           ...base.items.crate,

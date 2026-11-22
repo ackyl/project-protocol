@@ -267,3 +267,104 @@ export function heatGauge(c: Ctx, x: number, y: number, heat: number, t: number)
     r(c, '#ffd24a', bx + w + 3, by + 2, 2, 1)
   }
 }
+
+export interface SpecimenLook {
+  agitation: number
+  condition: number
+  t: number
+}
+
+/** Bio Specimen: a bell jar with a one-eyed creature that gets restless. */
+export function specimen(c: Ctx, x: number, y: number, k: SpecimenLook) {
+  const a = Math.min(1, k.agitation / 100)
+  const thrash = a > 0.6 ? Math.round(Math.sin(k.t * (10 + a * 30)) * (a > 0.85 ? 2 : 1)) : 0
+  c.save()
+  c.translate(Math.round(x), Math.round(y))
+  // Base plate with hazard dots
+  r(c, pal.ink, -8, -4, 16, 4)
+  r(c, '#3a3a4e', -7, -3, 14, 2)
+  r(c, '#9dff6a', -5, -3, 2, 1)
+  r(c, '#9dff6a', 3, -3, 2, 1)
+  // Jar
+  r(c, pal.ink, -7, -20, 14, 16)
+  const fluid = mix('#2f7a3a', '#a0308a', a)
+  r(c, fluid, -6, -19, 12, 15)
+  r(c, mix('#5fd06a', '#ff5ad0', a), -6, -19, 12, 2)
+  // Creature
+  const cx = thrash
+  r(c, mix('#c9ff9a', '#ffb0f0', a), -3 + cx, -14, 6, 6)
+  r(c, '#ffffff', -1 + cx, -13, 3, 3)
+  r(c, pal.ink, (a > 0.6 ? 0 : 1) + cx, -12, 1, 1)
+  const wig = Math.floor(k.t * (3 + a * 10)) % 2
+  r(c, mix('#c9ff9a', '#ffb0f0', a), -5 + cx, -9 + wig, 2, 3)
+  r(c, mix('#c9ff9a', '#ffb0f0', a), 3 + cx, -9 + (1 - wig), 2, 3)
+  // Bubbles
+  for (let i = 0; i < 2 + Math.round(a * 3); i++) {
+    const by = -6 - ((k.t * (4 + a * 10) + i * 3.3) % 12)
+    r(c, 'rgba(220,255,220,0.7)', -5 + ((i * 4) % 10), Math.round(by), 1, 1)
+  }
+  // Glass glint and lid
+  r(c, 'rgba(255,255,255,0.5)', -5, -18, 1, 10)
+  r(c, pal.ink, -8, -23, 16, 4)
+  r(c, '#7a7a94', -7, -22, 14, 2)
+  r(c, '#a9a2c2', -7, -22, 14, 1)
+  r(c, pal.ink, -1, -26, 2, 3)
+  // Cracks from pulses
+  if (k.condition < 100) r(c, '#e8ffe0', 3, -17, 1, 4)
+  if (k.condition < 80) r(c, '#e8ffe0', -4, -10, 1, 3)
+  c.restore()
+}
+
+/** Agitation gauge: green to magenta, with a warning blip near the limit. */
+export function agitationGauge(c: Ctx, x: number, y: number, level: number, t: number) {
+  const w = 16,
+    h = Math.min(1, level / 100)
+  const bx = Math.round(x - w / 2),
+    by = Math.round(y)
+  r(c, pal.ink, bx - 1, by - 1, w + 2, 4)
+  r(c, '#1a2a1a', bx, by, w, 2)
+  const col = h < 0.6 ? '#7dff6a' : h < 0.85 ? '#ff7ad8' : Math.floor(t * 8) % 2 ? '#ff3ac0' : '#ffe0f6'
+  r(c, col, bx, by, Math.max(1, Math.round(w * h)), 2)
+  if (h > 0.75 && Math.floor(t * 4) % 2 === 0) {
+    r(c, pal.ink, bx + w + 2, by - 4, 4, 8)
+    r(c, '#ff7ad8', bx + w + 3, by - 3, 2, 4)
+    r(c, '#ff7ad8', bx + w + 3, by + 2, 2, 1)
+  }
+}
+
+/** An open hull breach on the back wall: torn plating with space showing through. */
+export function breachHole(c: Ctx, x: number, floorY: number, t: number) {
+  const cx = Math.round(x),
+    cy = floorY - 30
+  c.save()
+  c.translate(cx, cy)
+  // Torn edge
+  const pts: [number, number][] = [[-9, -6], [-4, -11], [2, -9], [8, -12], [10, -3], [7, 5], [9, 10], [0, 8], [-6, 11], [-10, 4]]
+  c.fillStyle = '#d0d8e8'
+  c.beginPath()
+  pts.forEach(([px, py], i) => (i ? c.lineTo(px * 1.25, py * 1.25) : c.moveTo(px * 1.25, py * 1.25)))
+  c.closePath()
+  c.fill()
+  c.fillStyle = '#05030c'
+  c.beginPath()
+  pts.forEach(([px, py], i) => (i ? c.lineTo(px, py) : c.moveTo(px, py)))
+  c.closePath()
+  c.fill()
+  // Stars through the hole
+  r(c, '#ffffff', -3, -4, 1, 1)
+  r(c, '#9ab0ff', 4, 2, 1, 1)
+  // Frost rim flicker
+  if (Math.floor(t * 6) % 2) r(c, '#bfe8ff', -10, 3, 2, 1)
+  c.restore()
+}
+
+/** A welded patch plate left behind after a sealed breach. */
+export function patchPlate(c: Ctx, x: number, floorY: number) {
+  const cx = Math.round(x),
+    cy = floorY - 30
+  r(c, pal.ink, cx - 12, cy - 12, 24, 22)
+  r(c, '#6a7088', cx - 11, cy - 11, 22, 20)
+  r(c, '#8a90a8', cx - 11, cy - 11, 22, 1)
+  for (const [dx, dy] of [[-8, -8], [7, -8], [-8, 6], [7, 6]]) r(c, '#c8ccd8', cx + dx, cy + dy, 2, 2)
+  r(c, '#ff9a2a', cx - 11, cy + 8, 22, 1)
+}

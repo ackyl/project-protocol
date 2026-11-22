@@ -1,6 +1,6 @@
 // Pixel sprites rendered to data URLs so DOM screens reuse the in-game art.
 import type { CargoId } from '../game/content'
-import { cell, crate, officer } from './sprites'
+import { cell, courier, crate, officer, specimen } from './sprites'
 
 const cache = new Map<string, string>()
 
@@ -28,7 +28,9 @@ export function cargoIcon(id: CargoId) {
   return render('cargo-' + id, 28, 30, 4, (c) =>
     id === 'cell'
       ? cell(c, 14, 27, { heat: 30, condition: 100, t: 0.4, shake: false })
-      : crate(c, 13, 27, { t: 0.1, exposed: true, condition: 100 }),
+      : id === 'specimen'
+        ? specimen(c, 14, 28, { agitation: 10, condition: 100, t: 0.3 })
+        : crate(c, 13, 27, { t: 0.1, exposed: true, condition: 100 }),
   )
 }
 
@@ -38,4 +40,10 @@ export function officerPortrait() {
     c.fillRect(0, 0, 26, 22)
     officer(c, { x: 12, y: 40, face: 1, step: 0, walking: false, scanning: false, t: 0 })
   })
+}
+
+export function courierIcon() {
+  return render('courier', 20, 34, 4, (c) =>
+    courier(c, { x: 10, y: 33, face: 1, pose: 'idle', step: 0, t: 0, carrying: false, panic: false }),
+  )
 }

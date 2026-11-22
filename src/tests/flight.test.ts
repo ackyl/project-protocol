@@ -9,7 +9,8 @@ import {
   type Game,
 } from '../game/simulation'
 import { rules, ship, slots } from '../game/content'
-const launch = () => command(initial(), { type: 'accept' })
+import { classic, SURGE } from './classic'
+const launch = () => command(classic(initial()), { type: 'accept' })
 function advance(g: Game, count: number) {
   for (let i = 0; i < count; i++) g = tick(g)
   return g
@@ -47,13 +48,13 @@ it('cools secured cells and ejects an unshielded cell at the scripted surge', ()
   const heat = g.items.cell.heat
   g = tick(g)
   expect(g.items.cell.heat).toBeLessThan(heat)
-  g = advance(g, rules.surge * rules.hz - g.elapsed)
+  g = advance(g, SURGE - g.elapsed)
   expect(g.fault).toBe(true)
   expect(g.items.cell.location.kind).toBe('loose')
   expect(g.items.cell.heat).toBeGreaterThanOrEqual(rules.surgeHeat)
 })
 it('allows only nearby empty-handed console work and keeps time through misses and hits', () => {
-  let g = advance(launch(), rules.surge * rules.hz)
+  let g = advance(launch(), SURGE)
   expect(command(g, { type: 'repair' })).toBe(g)
   g = { ...g, player: position(g, 'cell')! }
   g = command(g, { type: 'pick', id: 'cell' })
@@ -95,7 +96,7 @@ it('preserves the shielded latch during the surge and still faults the power bus
   g = command(g, { type: 'pick', id: 'cell' })
   g = { ...g, player: slots.vault }
   g = command(g, { type: 'stow', slot: 'vault' })
-  g = advance(g, rules.surge * rules.hz)
+  g = advance(g, SURGE)
   expect(g.items.cell.location).toEqual({ kind: 'slot', slot: 'vault' })
   expect(g.items.cell.heat).toBe(0)
   expect(g.fault).toBe(true)

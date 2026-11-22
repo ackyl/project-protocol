@@ -20,11 +20,14 @@ Open the local address Vite prints and take the job.
 | Grab, stow, repair | E or Space (nearest prompt) | Click the cargo, slot or console | USE button, or tap the target |
 | Drop | Q | Click the courier | DROP button |
 | Lock repair / leave | E or Space / Esc or walk away | Click the gauge | USE (LOCK) / LEAVE |
-| Customs | E search · B bribe · 1/2 hand over | Buttons | Buttons |
-| Restart | R or Enter | Button | Button |
+| Customs | E search · B bribe · 1/2/3 hand over | Buttons | Buttons |
+| Rivets (breach patch) | Arrows or WASD | Click the arrows | Arrow buttons |
+| Next run / replay route | R or Enter / T | Buttons | Buttons |
 | Sound | M | Speaker button | Speaker button |
 
-The orange cell cooks while loose or carried. Rack it in a mustard cradle before it vents. The teal crate broadcasts until it sits in the shield bay (lower deck, bow end). Mid-run, a power surge blacks out the ship, blows ordinary rack latches and drains the hull until you win the phase-lock at the console (upper deck, aft). The clock never stops. When Cinder Gate appears, you have 20 seconds to hide everything. Customs then boards and checks five places. Each check costs you something.
+First-time players get a guided training run; it can be skipped and replayed from the job ticket.
+
+The orange **cell** cooks while loose or carried; rack it before it vents. The teal **crate** broadcasts until it sits in the shield bay. The green **specimen** pays best but gets agitated outside a cradle and eventually pulses, spoiling itself and blowing nearby rack latches. Each route brings a **power surge** (lock the console's needle in the green, upper deck aft) and a **hull impact** (patch the breach with the rivet sequence); sometimes both at once. The clock never stops. At Cinder Gate you get 20 seconds to hide everything, then customs checks five places. The route code on the ticket identifies the run; *Replay this route* repeats it exactly.
 
 ## Verification and deployment
 

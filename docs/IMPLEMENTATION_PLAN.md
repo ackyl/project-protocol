@@ -1,5 +1,7 @@
 # Project Protocol — Vertical Slice Implementation Plan
 
+> **Status: complete.** All four milestones and the completion checks are done. M4 presentation was later replaced by the game-first redesign and a performance pass. Results and what remains unverified are in [Development status](DEVELOPMENT_STATUS.md). This file is kept as the original delivery plan.
+
 Astra should execute **all** milestones below during the kickoff, not stop at scaffolding or a design document. Prioritize a playable vertical slice over polish. Keep each milestone working before proceeding.
 
 ## M1 — Foundation and visible ship
@@ -33,3 +35,18 @@ Astra should execute **all** milestones below during the kickoff, not stop at sc
 - Customs is a player-interactive phase grounded in actual ship/cargo state, not a random post-transit modal.
 - No dead buttons, placeholder-only interactions, silently ignored valid commands, or fake test results.
 - Out-of-scope five-day economy and additional cargo/hazards are clearly listed as future work, not reported as implemented.
+
+## Chunk 2 — FTUE and gameplay depth (complete)
+- Guided first delivery with large paused panels, demonstrations, skip/replay and `localStorage` completion.
+- Hull breach emergency with an ordered-rivet repair distinct from the phase lock.
+- Bio Specimen cargo with containment, pulses and a 50% rack detection chance.
+- Seeded hazard director (surge + impact, separated or deliberately overlapped), next run vs replay route.
+- Feedback: cargo status strip, distinct emergency colours and sounds, stacked callouts.
+- Verification and results: [Development status](DEVELOPMENT_STATUS.md).
+
+## Next: chunk 3 — the week (not started)
+- Five-day campaign with escalating director settings (more hazards, tighter overlaps, harsher customs).
+- Weekly syndicate quota and what happens when it is missed.
+- Shop and upgrades between days (for example better racks, a second shielded slot, console tuning).
+- Save-game progression for the week.
+- Further cargo types and hazards only where they create new two-places-at-once decisions.

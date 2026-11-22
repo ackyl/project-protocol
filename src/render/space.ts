@@ -8,12 +8,6 @@ const stars = Array.from({ length: 260 }, (_, i) => ({
   layer: i % 3,
   tw: hash(i * 3 + 3),
 }))
-const rocks = Array.from({ length: 14 }, (_, i) => ({
-  x: hash(i + 900),
-  y: hash(i + 950),
-  s: 2 + Math.floor(hash(i + 990) * 5),
-}))
-
 export interface SpaceLook {
   W: number
   H: number
@@ -29,86 +23,28 @@ export interface SpaceLook {
 
 export function space(c: Ctx, k: SpaceLook) {
   const { W, H } = k
-  const g = c.createLinearGradient(0, 0, 0, H)
-  g.addColorStop(0, '#0c0a1a')
-  g.addColorStop(0.55, '#1b1232')
-  g.addColorStop(1, k.scene === 'gate' || k.scene === 'approach' ? '#3a1a22' : '#2a1430')
-  c.fillStyle = g
+  c.fillStyle = k.scene === 'gate' || k.scene === 'approach' ? '#1a0f22' : '#120d22'
   c.fillRect(0, 0, W, H)
-  // Nebula smears
-  const neb = (x: number, y: number, rad: number, col: string, a: number) => glow(c, x, y, rad, col, a)
-  const drift = k.travel * 0.02
-  neb(((W * 0.25 - drift) % (W + 300) + W + 300) % (W + 300) - 150, H * 0.3, 160, '#5a2a6a', 0.35)
-  neb(((W * 0.8 - drift * 0.7) % (W + 300) + W + 300) % (W + 300) - 150, H * 0.75, 200, '#2a3a6a', 0.3)
-  // Stars, three parallax layers
-  const speeds = [0.05, 0.15, 0.4]
+  // Stars: two cheap parallax layers; only the near one drifts noticeably.
+  const speeds = [0.04, 0.25]
+  c.fillStyle = '#5a5078'
   for (const s of stars) {
-    const sp = speeds[s.layer]
-    const x = ((s.x * W - k.travel * sp) % W + W) % W
-    const y = s.y * H
-    const tw = Math.sin(k.t * (1 + s.tw * 3) + s.tw * 20) > 0.6
-    const col = s.layer === 2 ? '#d8c8e8' : s.layer === 1 ? '#8a7aa8' : '#4a4268'
-    r(c, tw && s.layer > 0 ? '#ffffff' : col, x, y, 1, 1)
-    if (s.layer === 2 && k.scene === 'highway') r(c, 'rgba(216,200,232,0.35)', x + 1, y, 3, 1)
+    if (s.layer === 2) continue
+    const x = ((s.x * W - k.travel * speeds[s.layer]) % W + W) % W
+    c.fillStyle = s.layer ? '#a898c0' : '#4a4268'
+    c.fillRect(Math.round(x), Math.round(s.y * H), 1, 1)
   }
-  // Ringed moon
-  const mx = W * 0.82 - k.travel * 0.01,
-    my = H * 0.16
-  c.save()
-  c.translate(Math.round(mx), Math.round(my))
-  c.strokeStyle = '#6a4a6a'
-  c.lineWidth = 2
-  c.beginPath()
-  c.ellipse(0, 0, 44, 7, -0.25, Math.PI, Math.PI * 2)
-  c.stroke()
-  disc(c, '#7a5470', 0, 0, 20)
-  for (let i = -20; i < 20; i += 5) r(c, '#6a4864', -18, i, 36, 2)
-  disc(c, '#8a6480', -5, -6, 10)
-  c.beginPath()
-  c.ellipse(0, 0, 44, 7, -0.25, 0, Math.PI)
-  c.strokeStyle = '#a8849a'
-  c.stroke()
-  c.restore()
-  // Ash belt: drifting rock silhouettes and a dusty haze
-  const haze = c.createLinearGradient(0, H * 0.7, 0, H)
-  haze.addColorStop(0, 'rgba(120,50,50,0)')
-  haze.addColorStop(1, 'rgba(150,70,50,0.35)')
-  c.fillStyle = haze
-  c.fillRect(0, H * 0.7, W, H * 0.3)
-  for (const rk of rocks) {
-    const x = ((rk.x * (W + 60) - k.travel * 0.6) % (W + 60) + W + 60) % (W + 60) - 30
-    const y = H * (rk.y < 0.5 ? 0.04 + rk.y * 0.12 : 0.86 + (rk.y - 0.5) * 0.2)
-    disc(c, '#2a1c26', x, y, rk.s)
-    r(c, '#4a3038', x - rk.s + 1, y - rk.s + 1, rk.s, 1)
-  }
-  if (k.scene === 'highway' || k.scene === 'approach') {
-    // Near ash streaks for speed
-    for (let i = 0; i < 26; i++) {
-      const x = ((hash(i + 400) * W * 2 - k.travel * 2.2) % (W * 2) + W * 2) % (W * 2) - W * 0.5
-      const y = hash(i + 450) * H
-      r(c, 'rgba(200,150,140,0.35)', x, y, 6 + hash(i) * 10, 1)
-    }
-    // Highway lane buoys
-    for (let i = 0; i < 6; i++) {
-      const span = W + 200
-      const x = ((i * 260 - k.travel * 0.9) % span + span) % span - 100
-      for (const y of [H * 0.08, H * 0.93]) buoy(c, x, y, k.t + i)
-    }
-  }
+  // Ringed moon (static)
+  const mx = Math.round(W * 0.82),
+    my = Math.round(H * 0.16)
+  disc(c, '#7a5470', mx, my, 20)
+  disc(c, '#8a6480', mx - 5, my - 6, 10)
+  r(c, '#a8849a', mx - 44, my, 88, 2)
   if (k.scene === 'dock') dock(c, k)
   if (k.scene === 'approach') gateFar(c, k)
   if (k.scene === 'gate') gate(c, k)
 }
 
-function buoy(c: Ctx, x: number, y: number, t: number) {
-  r(c, pal.ink, x - 2, y - 6, 5, 12)
-  r(c, '#4a4a62', x - 1, y - 5, 3, 10)
-  r(c, pal.ink, x - 6, y - 1, 13, 3)
-  r(c, '#6a6a82', x - 5, y, 11, 1)
-  const on = Math.floor(t * 2) % 2 === 0
-  r(c, on ? '#ffb02a' : '#5a3a1a', x - 1, y - 8, 3, 2)
-  if (on) glow(c, x, y - 7, 12, '#ffa02a', 0.5)
-}
 
 function dock(c: Ctx, k: SpaceLook) {
   // Relay Nine gantry: a clamp arm from above and a fuel boom below.

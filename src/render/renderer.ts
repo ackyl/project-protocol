@@ -1,15 +1,16 @@
 // Full-screen game renderer. A low-resolution pixel-art world is drawn into an
 // offscreen buffer, sharply upscaled to the display, then crisp world-anchored
 // UI (prompts, gauges, callouts) is drawn on top at display resolution.
-import { cargo, cargoIds, rules, searchStops, ship, type CargoId, type Floor } from '../game/content'
+import { breachSites, cargo, cargoIds, rules, searchStops, ship, type CargoId, type Dir, type Floor, type SiteId } from '../game/content'
 import { atStop, detection, exposure } from '../game/customs'
 import { canClimb, cursor, heldItem, mobile, position, shielded, type Game } from '../game/simulation'
 import type { GameEvent } from '../app/events'
 import { actions } from '../app/interact'
 import type { Runner } from '../app/runner'
+import type { Focus } from '../app/tutorial'
 import { sfx } from '../audio/sfx'
 import { Fx } from './fx'
-import { glow, hash, pal, r, type Ctx } from './pixel'
+import { pal, r, type Ctx } from './pixel'
 import {
   consoleScreen,
   drawShipStatic,
@@ -23,7 +24,7 @@ import {
   type ShipLook,
 } from './ship'
 import { debris, space, type Scene } from './space'
-import { cell, courier, crate, heatGauge, officer, signalRings, type Pose } from './sprites'
+import { agitationGauge, breachHole, cell, courier, crate, heatGauge, officer, patchPlate, signalRings, specimen, type Pose } from './sprites'
 import {
   AIRLOCK_X,
   BOUNDS,
@@ -81,10 +82,7 @@ function stopSpot(id: string): { x: number; floor: Floor; face: 1 | -1 } {
 
 export class Renderer {
   private c: Ctx
-  private buf = document.createElement('canvas')
   private b: Ctx
-  private up = document.createElement('canvas')
-  private u: Ctx
   private shipCache = document.createElement('canvas')
   fx = new Fx()
   insets: Insets = { top: 0, right: 0, bottom: 0, left: 0 }
@@ -104,23 +102,26 @@ export class Renderer {
   private moving = 0
   private climbFrom: number | null = null
   private power = 1
-  private flickerUntil = 0
   private travel = 0
   private speed = 0
   private banners: Banner[] = []
   private gaugeFlash: { color: string; until: number } | null = null
   private officer = { x: AIRLOCK_X, floor: 0 as Floor, face: -1 as 1 | -1, step: 0, walking: false, climb: 0, visible: false, leaving: false }
   private gaugeRect = { x: 0, y: 0, w: 0, h: 0 }
-  private deathAt = 0
+  private rivetRects: { dir: Dir; x: number; y: number; w: number; h: number }[] = []
+  private patched = new Set<SiteId>()
+  private pulses: { x: number; y: number; born: number }[] = []
+  /** Tutorial highlight provider. */
+  focus: () => Focus | null = () => null
   private unsubs: (() => void)[] = []
 
   constructor(
+    private buf: HTMLCanvasElement,
     private canvas: HTMLCanvasElement,
     private runner: Runner,
   ) {
     this.c = canvas.getContext('2d')!
-    this.b = this.buf.getContext('2d')!
-    this.u = this.up.getContext('2d')!
+    this.b = buf.getContext('2d', { alpha: false })!
     this.shipCache.width = 660
     this.shipCache.height = 250
     const sc = this.shipCache.getContext('2d')!
@@ -130,17 +131,18 @@ export class Renderer {
     this.lastX = runner.game.player.x
     runner.scanReady = () => this.officerAtPost(runner.game)
     this.unsubs.push(runner.onEvent((e) => this.event(e)))
-    this.unsubs.push(runner.onFrame((now, dt) => this.frame(now, dt)))
+    this.unsubs.push(runner.onFrame((now) => this.frame(now)))
   }
   destroy() {
     this.unsubs.forEach((u) => u())
   }
 
   // ── Camera ─────────────────────────────────────────────────────────────
-  private layout(dt: number) {
+  private layout() {
     const W = this.canvas.clientWidth,
       H = this.canvas.clientHeight
-    const dpr = Math.min(3, window.devicePixelRatio || 1)
+    // The overlay only carries text and prompts; cap its resolution.
+    const dpr = Math.min(1.5, window.devicePixelRatio || 1)
     if (W !== this.W || H !== this.H || dpr !== this.dpr) {
       this.W = W
       this.H = H
@@ -153,12 +155,11 @@ export class Renderer {
       ah = Math.max(60, H - i.top - i.bottom)
     const B = aw / ah < 1.1 ? BOUNDS_TIGHT : BOUNDS
     const target = Math.min(aw / B.w, ah / B.h)
-    const k = this.s === 0 || this.fx.reduced ? 1 : Math.min(1, dt * 6)
-    this.s = lerp(this.s, target, k)
+    this.s = target
     const cx = i.left + aw / 2,
       cy = i.top + ah / 2
-    this.camX = B.x + B.w / 2 - cx / this.s
-    this.camY = B.y + B.h / 2 - cy / this.s
+    this.camX = Math.floor(B.x + B.w / 2 - cx / this.s)
+    this.camY = Math.floor(B.y + B.h / 2 - cy / this.s)
   }
   toArt(px: number, py: number) {
     return { x: px / this.s + this.camX, y: py / this.s + this.camY }
@@ -192,9 +193,11 @@ export class Renderer {
     switch (e.type) {
       case 'accepted':
         sfx.accept()
-        this.banner('UNDERWAY', '#ffd38a', 'Ash Belt highway · Cinder Gate in 90s')
+        if (!g.training) this.banner('UNDERWAY', '#ffd38a', 'Ash Belt highway · Cinder Gate in 90s')
         break
       case 'restart':
+        this.patched.clear()
+        this.pulses = []
         this.officer.visible = false
         this.banners = []
         this.fx.particles = []
@@ -205,7 +208,6 @@ export class Renderer {
         break
       case 'drop':
         sfx.drop()
-        this.fx.shake(1.5)
         this.fx.burst(pxArt, pyArt - 1, 10, { speed: 35, spread: 1.6, angle: -Math.PI / 2, gravity: 90, max: 0.45, colors: ['#9a94a8', '#6a6478'] })
         break
       case 'stow': {
@@ -221,17 +223,13 @@ export class Renderer {
         sfx.zap()
         const p = this.itemArt(g, e.id)
         this.fx.sparks(p.x, p.y - 20, 18)
-        this.fx.shake(2)
         this.say('LATCH BLOWN!', p.x, p.y - 44, '#ffb02a')
         break
       }
       case 'vent': {
         sfx.vent()
         const p = this.itemArt(g, e.id)
-        this.fx.shake(7)
-        this.fx.flashScreen('#ff7a2a', 380, this.now)
         this.fx.burst(p.x, p.y - 10, 50, { speed: 120, max: 0.8, gravity: 40, colors: ['#fff0c8', '#ffb02a', '#ff5a1a', '#ff2a1a'], glow: true })
-        for (let i = 0; i < 8; i++) this.fx.smoke(p.x + (Math.random() - 0.5) * 16, p.y - 14, 2, true)
         this.say('VENTED!', p.x, p.y - 40, '#ff6a3a', true)
         this.say(`−${rules.blastDamage} HULL  −${rules.conditionLoss}% CARGO`, p.x, p.y - 26, '#ffb08a')
         break
@@ -240,7 +238,6 @@ export class Renderer {
         if (e.amount < rules.blastDamage) sfx.hit()
         const [x, y] = DAMAGE[Math.floor(Math.random() * DAMAGE.length)]
         this.fx.sparks(x, y, 8)
-        this.fx.shake(1)
         break
       }
       case 'climbStart':
@@ -251,27 +248,67 @@ export class Renderer {
         break
       case 'surge':
         sfx.surge()
-        this.fx.shake(8)
-        this.fx.flashScreen('#cfe8ff', 260, this.now)
-        this.flickerUntil = this.now + 700
-        for (const x of [CONSOLE_X, 176, 236, 300, 380, 460]) this.fx.sparks(x, ceilY(1) + 10, 14)
+                for (const x of [CONSOLE_X, 176, 236, 300, 380, 460]) this.fx.sparks(x, ceilY(1) + 10, 14)
         this.fx.sparks(CONSOLE_X, floorY[1] - 34, 24)
         this.banner('POWER SURGE', '#ff4a4a', 'Bus fault · hull is draining', 2600)
         break
       case 'repaired':
         sfx.repaired()
-        this.flickerUntil = this.now + 900
-        this.fx.flashScreen('#9affc8', 220, this.now)
-        this.gaugeFlash = { color: '#7dffa8', until: this.now + 300 }
+                this.gaugeFlash = { color: '#7dffa8', until: this.now + 300 }
         this.fx.burst(CONSOLE_X, floorY[1] - 30, 30, { speed: 80, max: 0.6, colors: ['#d0ffe0', '#7dffa8', '#ffffff'], glow: true })
         this.say('POWER RESTORED', CONSOLE_X, floorY[1] - 52, '#7dffa8', true)
         break
+      case 'impact': {
+        sfx.impact()
+        const b = breachSites[e.site]
+        const x = ax(b.x),
+          y = floorY[b.floor] - 30
+        this.fx.burst(x, y, 24, { speed: 110, max: 0.6, gravity: 60, colors: ['#ffffff', '#bfe8ff', '#8a90a8'] })
+        this.say(`−${rules.impactDamage} HULL`, x, y - 24, '#bfe8ff')
+        this.banner('HULL BREACH', '#62e6ff', `${b.name} · patch it before the hull bleeds out`, 2600)
+        break
+      }
+      case 'patchOpen':
+        sfx.open()
+        break
+      case 'rivet': {
+        sfx.rivet(e.progress)
+        const b = g.breach ? breachSites[g.breach.site] : null
+        if (b) this.fx.sparks(ax(b.x), floorY[b.floor] - 30, 5)
+        break
+      }
+      case 'slip': {
+        sfx.miss()
+        const b = g.breach ? breachSites[g.breach.site] : null
+        if (b) {
+          this.fx.sparks(ax(b.x), floorY[b.floor] - 30, 14)
+          this.say(`SLIPPED  −${rules.slipDamage}`, ax(b.x), floorY[b.floor] - 56, '#ff8a6a')
+        }
+        this.gaugeFlash = { color: '#ff3d4a', until: this.now + 260 }
+        break
+      }
+      case 'sealed': {
+        sfx.repaired()
+        this.patched.add(e.site)
+        const b = breachSites[e.site]
+        this.fx.burst(ax(b.x), floorY[b.floor] - 30, 20, { speed: 70, max: 0.5, colors: ['#bfe8ff', '#ffffff'] })
+        this.say('BREACH SEALED', ax(b.x), floorY[b.floor] - 58, '#62e6ff', true)
+        break
+      }
+      case 'pulse': {
+        sfx.pulse()
+        const p = this.itemArt(g, e.id)
+        this.pulses.push({ x: p.x, y: p.y - 12, born: this.now })
+        this.fx.burst(p.x, p.y - 12, 18, { speed: 90, max: 0.5, colors: ['#ff7ad8', '#9dff6a', '#ffffff'] })
+        this.say('SPECIMEN PULSE!', p.x, p.y - 44, '#ff7ad8', true)
+        this.say(`−${rules.pulseConditionLoss}% CARGO · LATCHES BLOWN`, p.x, p.y - 30, '#ffb0e8')
+        break
+      }
       case 'consoleOpen':
         sfx.open()
         break
       case 'repairMiss':
         sfx.miss()
-        this.fx.shake(2.5)
         this.gaugeFlash = { color: '#ff3d4a', until: this.now + 260 }
         this.fx.sparks(CONSOLE_X, floorY[1] - 30, 14)
         break
@@ -309,41 +346,41 @@ export class Renderer {
           this.banner('GATE CLEARED', '#7dffa8', 'Freight delivered', 1600)
         } else if (e.outcome === 'arrest') {
           sfx.busted()
-          this.fx.shake(4)
           this.banner('CONTRABAND DETECTED', '#ff3d4a', 'Courier detained', 2400)
         } else {
           sfx.boom()
-          this.deathAt = this.now
-          this.fx.shake(12)
-          this.fx.flashScreen('#ffffff', 600, this.now)
           for (const [x, y] of DAMAGE) {
             this.fx.burst(x, y, 30, { speed: 140, max: 1.2, colors: ['#fff0c8', '#ffb02a', '#ff5a1a'], glow: true })
-            this.fx.smoke(x, y, 6, true)
           }
-          this.banner('HULL BREACH', '#ff5a3a', 'The Ash Belt keeps what it takes', 2600)
+          this.banner('HULL FAILURE', '#ff5a3a', 'The Ash Belt keeps what it takes', 2600)
         }
         break
     }
   }
 
   // ── Frame ──────────────────────────────────────────────────────────────
-  private frame(now: number, dt: number) {
-    this.now = now
-    this.t += dt
-    this.layout(dt)
+  private lastRender = 0
+  private frame(now: number) {
     const g = this.runner.game
-    this.fx.update(dt)
-    this.updateVisuals(g, dt)
-    this.world(g)
-    this.present()
-    this.overlay(g)
     sfx.update(now, {
       alarm: g.fault && g.phase === 'highway',
+      breach: !!g.breach && g.phase === 'highway',
+      agitation: g.phase === 'highway' ? g.items.specimen.agitation : 0,
       heat: mobile(g) && g.phase === 'highway' ? g.items.cell.heat : 0,
       engine: g.phase === 'highway' ? 1 : g.phase === 'prep' ? 0.6 : g.phase === 'contract' ? 0.25 : 0,
     })
+    // The simulation runs at 30 Hz, so drawing faster only burns GPU time.
+    if (now - this.lastRender < 1000 / 31) return
+    const step = Math.min(0.1, (now - this.lastRender) / 1000)
+    this.lastRender = now
+    this.now = now
+    this.t += step
+    this.layout()
+    this.fx.update(step)
+    this.updateVisuals(g, step)
+    this.world(g)
+    this.overlay(g)
   }
-
   private scene(g: Game): Scene {
     if (g.phase === 'contract') return 'dock'
     if (g.phase === 'highway') return 'highway'
@@ -377,26 +414,17 @@ export class Renderer {
     const want = scene === 'highway' ? 140 : scene === 'approach' ? lerp(140, 8, g.elapsed / (rules.prep * rules.hz)) : 0
     this.speed = lerp(this.speed, want, Math.min(1, dt * 2))
     this.travel += this.speed * dt
-    // Hull damage smoke
-    if (mobile(g) || g.phase === 'search' || g.outcome === 'death') {
-      const dmg = 1 - g.hull / rules.hull
-      const n = Math.floor(dmg * DAMAGE.length)
-      for (let i = 0; i < n; i++) {
-        if (Math.random() < dt * (0.8 + dmg * 3)) this.fx.smoke(DAMAGE[i][0], DAMAGE[i][1], 1, true)
-        if (dmg > 0.5 && Math.random() < dt * 4) this.fx.burst(DAMAGE[i][0], DAMAGE[i][1], 1, { speed: 18, gravity: -30, max: 0.4, colors: ['#ffb02a', '#ff5a1a'], glow: true })
-      }
-    }
-    // Ambient sparks from a faulted bus
-    if (g.fault && g.phase === 'highway' && Math.random() < dt * 5) {
-      const sx = [CONSOLE_X, 176, 236, 330][Math.floor(Math.random() * 4)]
-      this.fx.sparks(sx, sx === CONSOLE_X ? floorY[1] - 38 : ceilY(1) + 12, 5)
-      if (Math.random() < 0.5) sfx.zap()
-    }
-    // Hot cell steam
-    const cellPos = position(g, 'cell')
-    if (cellPos && mobile(g) && g.items.cell.heat > 50 && Math.random() < dt * (g.items.cell.heat / 12)) {
-      const p = g.items.cell.location.kind === 'held' ? { x: ax(g.player.x), y: floorY[g.player.floor] - 32 } : { x: ax(cellPos.x), y: floorY[cellPos.floor] - 20 }
-      this.fx.smoke(p.x, p.y, 1)
+    // Air rushing toward an open breach (a handful of streaks per second)
+    if (g.breach && g.phase === 'highway' && Math.random() < dt * 10) {
+      const b = breachSites[g.breach.site]
+      const x = ax(b.x),
+        y = floorY[b.floor] - 30
+      const sx = x + (Math.random() < 0.5 ? -1 : 1) * (30 + Math.random() * 40)
+      const sy = y + (Math.random() - 0.5) * 36
+      this.fx.burst(sx, sy, 1, { speed: 0, max: 0.5, colors: ['#bfe8ff'] })
+      const p = this.fx.particles[this.fx.particles.length - 1]
+      p.vx = (x - sx) * 2
+      p.vy = (y - sy) * 2
     }
     this.updateOfficer(g, dt)
   }
@@ -444,17 +472,18 @@ export class Renderer {
 
   // ── World (pixel buffer) ──────────────────────────────────────────────
   private world(g: Game) {
-    const bw = Math.ceil(this.W / this.s) + 2,
-      bh = Math.ceil(this.H / this.s) + 2
+    const bw = Math.ceil(this.W / this.s) + 1,
+      bh = Math.ceil(this.H / this.s) + 1
     if (this.buf.width !== bw || this.buf.height !== bh) {
       this.buf.width = bw
       this.buf.height = bh
+      this.buf.style.width = bw * this.s + 'px'
+      this.buf.style.height = bh * this.s + 'px'
     }
     const c = this.b
     c.imageSmoothingEnabled = false
     c.setTransform(1, 0, 0, 1, 0, 0)
     const scene = this.scene(g)
-    const [shx, shy] = this.fx.shakeOffset(this.t)
     const ox = Math.floor(this.camX),
       oy = Math.floor(this.camY)
     space(c, {
@@ -468,9 +497,8 @@ export class Renderer {
       approach: g.phase === 'prep' ? g.elapsed / (rules.prep * rules.hz) : 0,
       alarm: g.outcome === 'arrest' ? 1 : this.runner.ui.scanning ? 0.4 : 0,
     })
-    c.translate(-ox + shx, -oy + shy)
-    const flicker = this.now < this.flickerUntil ? (hash(Math.floor(this.now / 50)) > 0.5 ? 1 : 0.1) : 1
-    const power = this.power * flicker
+    c.translate(-ox, -oy)
+    const power = this.power
     const look: ShipLook = {
       t: this.t,
       power,
@@ -478,13 +506,6 @@ export class Renderer {
       thrust: scene === 'highway' ? 1 : scene === 'approach' ? lerp(1, 0.25, g.elapsed / (rules.prep * rules.hz)) : scene === 'dock' ? 0.2 : 0,
       hull: g.hull,
       airlockOpen: this.officer.visible ? 1 : 0,
-    }
-    if (scene === 'wreck') {
-      // Dead in space: the hull slowly lists and drifts.
-      const k = Math.min(1, (this.now - this.deathAt) / 6000)
-      c.translate(330, 130)
-      c.rotate(-0.05 * k)
-      c.translate(-330 + k * 6, -130 + k * 4)
     }
     exhaust(c, look)
     c.drawImage(this.shipCache, 0, 0)
@@ -495,6 +516,11 @@ export class Renderer {
     this.lighting(c, g, power)
     machinery(c, look)
     consoleScreen(c, look, g.repairTicks !== null)
+    for (const site of this.patched) patchPlate(c, ax(breachSites[site].x), floorY[breachSites[site].floor])
+    if (g.breach) {
+      const b = breachSites[g.breach.site]
+      breachHole(c, ax(b.x), floorY[b.floor], this.t)
+    }
     this.searchMarks(c, g)
     this.items(c, g, 'slot')
     // Slot fronts
@@ -520,7 +546,19 @@ export class Renderer {
     this.drawCourier(c, g)
     this.items(c, g, 'held')
     this.damage(c, g)
-    if (scene === 'wreck') debris(c, this.t, 0, 0)
+    if (scene === 'wreck') debris(c, 0, 0, 0)
+    // Specimen pulse shockwaves (a few cheap expanding rings)
+    this.pulses = this.pulses.filter((p) => this.now - p.born < 600)
+    for (const p of this.pulses) {
+      const k = (this.now - p.born) / 600
+      c.strokeStyle = k < 0.5 ? '#ff7ad8' : '#9dff6a'
+      c.globalAlpha = 1 - k
+      c.lineWidth = 2
+      c.beginPath()
+      c.arc(p.x, p.y, 6 + k * 70, 0, Math.PI * 2)
+      c.stroke()
+      c.globalAlpha = 1
+    }
     this.fx.draw(c)
     c.setTransform(1, 0, 0, 1, 0, 0)
   }
@@ -536,22 +574,6 @@ export class Renderer {
         const y = ceilY(f) + 9
         r(c, pal.ink, x - 5, y, 10, 3)
         r(c, power > 0.5 ? '#ffe6b0' : '#4a3a2a', x - 4, y + 1, 8, 2)
-        if (power > 0.05) {
-          c.save()
-          c.globalCompositeOperation = 'lighter'
-          const grad = c.createLinearGradient(0, y, 0, floorY[f])
-          grad.addColorStop(0, `rgba(255,200,120,${0.22 * power})`)
-          grad.addColorStop(1, 'rgba(255,200,120,0)')
-          c.fillStyle = grad
-          c.beginPath()
-          c.moveTo(x - 4, y + 3)
-          c.lineTo(x + 4, y + 3)
-          c.lineTo(x + 22, floorY[f])
-          c.lineTo(x - 22, floorY[f])
-          c.closePath()
-          c.fill()
-          c.restore()
-        }
       }
     }
     // Emergency beacons during a fault
@@ -560,10 +582,9 @@ export class Renderer {
       for (const [i, x] of [200, 330, 462].entries()) {
         for (const f of [0, 1] as Floor[]) {
           const y = ceilY(f) + 8
-          const a = reduced ? 0.5 : (Math.sin(this.t * 7 + i * 2 + f) + 1) / 2
+          const a = reduced ? 1 : Math.floor(this.t * 2 + i) % 2
           r(c, pal.ink, x - 3, y - 1, 6, 4)
           r(c, a > 0.5 ? '#ff4a4a' : '#7a1a1a', x - 2, y, 4, 2)
-          glow(c, x, y + 4, 60, '#ff2a2a', 0.15 + a * 0.35)
         }
       }
     }
@@ -634,6 +655,9 @@ export class Renderer {
         const hot = live && item.heat > 70 && loc.kind !== 'slot'
         cell(c, x, y, { heat: g.phase === 'contract' ? 18 : item.heat, condition: item.condition, t: this.t, shake: hot })
         if (live && g.phase === 'highway' && (item.heat > 1 || loc.kind !== 'slot')) heatGauge(c, x, y - 30, item.heat, this.t)
+      } else if (id === 'specimen') {
+        specimen(c, x, y, { agitation: item.agitation, condition: item.condition, t: this.t })
+        if (live && g.phase === 'highway' && item.agitation > 1) agitationGauge(c, x, y - 32, item.agitation, this.t)
       } else {
         const exposed = !shielded(item)
         if (exposed && (live || g.phase === 'search')) signalRings(c, x, y, this.t, g.phase === 'highway' ? 0.5 : 1)
@@ -717,47 +741,11 @@ export class Renderer {
     }
   }
 
-  // ── Upscale ────────────────────────────────────────────────────────────
-  private present() {
-    const c = this.c
-    const scale = this.s * this.dpr
-    const k = Math.max(1, Math.floor(scale))
-    const bw = this.buf.width,
-      bh = this.buf.height
-    if (this.up.width !== bw * k || this.up.height !== bh * k) {
-      this.up.width = bw * k
-      this.up.height = bh * k
-    }
-    this.u.imageSmoothingEnabled = false
-    this.u.drawImage(this.buf, 0, 0, bw * k, bh * k)
-    c.setTransform(1, 0, 0, 1, 0, 0)
-    c.imageSmoothingEnabled = true
-    c.imageSmoothingQuality = 'high'
-    const fx = (this.camX - Math.floor(this.camX)) * scale,
-      fy = (this.camY - Math.floor(this.camY)) * scale
-    c.drawImage(this.up, -fx, -fy, bw * scale, bh * scale)
-    const fl = this.fx.flash
-    if (fl && this.now < fl.until && !this.fx.reduced) {
-      c.globalAlpha = ((fl.until - this.now) / fl.dur) * 0.5
-      c.fillStyle = fl.color
-      c.fillRect(0, 0, this.canvas.width, this.canvas.height)
-      c.globalAlpha = 1
-    }
-    // Vignette, reddened while the hull drains
-    const g = this.runner.game
-    const danger = g.fault && g.phase === 'highway' ? 0.35 + Math.sin(this.t * 6) * 0.12 : 0
-    const W = this.canvas.width,
-      H = this.canvas.height
-    const v = c.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.75)
-    v.addColorStop(0, 'rgba(0,0,0,0)')
-    v.addColorStop(1, danger ? `rgba(120,0,10,${danger})` : 'rgba(0,0,0,0.45)')
-    c.fillStyle = v
-    c.fillRect(0, 0, W, H)
-  }
-
   // ── Crisp overlay ──────────────────────────────────────────────────────
   private overlay(g: Game) {
     const c = this.c
+    c.setTransform(1, 0, 0, 1, 0, 0)
+    c.clearRect(0, 0, this.canvas.width, this.canvas.height)
     c.setTransform(this.dpr, 0, 0, this.dpr, 0, 0)
     c.textBaseline = 'middle'
     c.textAlign = 'center'
@@ -768,6 +756,10 @@ export class Renderer {
     if (g.phase === 'search' && this.officerAtPost(g) && s >= 1.2) this.riskTags(c, g, ui, true)
     if (g.repairTicks !== null) this.gauge(c, g, ui)
     else this.gaugeRect.w = 0
+    if (g.patch !== null && g.breach) this.patchPanel(c, g, ui)
+    else this.rivetRects = []
+    const f = this.focus()
+    if (f) this.brackets(c, f)
     // Floaters
     for (const f of this.fx.floaters) {
       const age = (this.now - f.born) / 1000
@@ -874,18 +866,30 @@ export class Renderer {
     if (cp && g.phase === 'highway' && g.items.cell.heat > 60 && g.items.cell.location.kind === 'loose') {
       this.diamond(c, this.sx(ax(cp.x)), this.sy(floorY[cp.floor] - 46) - pulse * 5, 11 * ui, '#ff8a2a', '!')
     }
-    if (g.climb || g.repairTicks !== null) return
+    // Breach marker (cold blue: vacuum, not electrical)
+    if (g.breach && g.phase === 'highway' && g.patch === null && acts[0]?.cmd.type !== 'patch') {
+      const b = breachSites[g.breach.site]
+      this.diamond(c, this.sx(ax(b.x)), this.sy(floorY[b.floor] - 52) - pulse * 6, 12 * ui, '#62e6ff', '!')
+    }
+    // Restless specimen marker
+    const sp = position(g, 'specimen')
+    if (sp && g.phase === 'highway' && g.items.specimen.agitation > 70 && g.items.specimen.location.kind !== 'held') {
+      this.diamond(c, this.sx(ax(sp.x)), this.sy(floorY[sp.floor] - 48) - pulse * 5, 11 * ui, '#ff7ad8', '!')
+    }
+    if (g.climb || g.repairTicks !== null || g.patch !== null) return
     // Nearest context action
     const held = heldItem(g)
     const a = acts[0]
     if (a) {
-      const top = a.cmd.type === 'repair' ? 46 : a.cmd.type === 'stow' ? (a.cmd.slot === 'vault' ? 58 : 42) : 34
+      const top = a.cmd.type === 'repair' ? 46 : a.cmd.type === 'patch' ? 50 : a.cmd.type === 'stow' ? (a.cmd.slot === 'vault' ? 58 : 42) : 34
       const x = this.sx(ax(a.at.x)),
         y = this.sy(floorY[a.at.floor] - top) - 14 * ui
       const col =
         a.cmd.type === 'repair'
           ? '#ff6a5a'
-          : a.cmd.type === 'stow'
+          : a.cmd.type === 'patch'
+            ? '#62e6ff'
+            : a.cmd.type === 'stow'
             ? a.cmd.slot === 'vault'
               ? '#62e6ff'
               : '#7dffa8'
@@ -1034,6 +1038,88 @@ export class Renderer {
     c.fillText('HULL DRAINING — CLOCK STILL RUNNING', x + w / 2, y + h - 12 * ui)
   }
 
+  private patchPanel(c: Ctx, g: Game, ui: number) {
+    const b = breachSites[g.breach!.site]
+    const seq = g.breach!.seq
+    const w = Math.min(this.W - 24, 300 * ui),
+      h = 132 * ui
+    const x = clamp(this.sx(ax(b.x)) - w / 2, 12, this.W - w - 12)
+    let y = this.sy(floorY[b.floor] - 62) - h
+    if (y < this.insets.top + 6) y = this.sy(floorY[b.floor] + 8)
+    const flash = this.gaugeFlash && this.now < this.gaugeFlash.until ? this.gaugeFlash.color : null
+    c.fillStyle = 'rgba(10,6,18,0.94)'
+    c.fillRect(x - 3, y - 3, w + 6, h + 6)
+    c.fillStyle = flash ?? '#24405a'
+    c.fillRect(x, y, w, h)
+    c.fillStyle = '#0e1620'
+    c.fillRect(x + 3, y + 3, w - 6, h - 6)
+    c.textAlign = 'left'
+    c.font = `italic 800 ${16 * ui}px ${FONT}`
+    c.fillStyle = '#62e6ff'
+    c.fillText('SEAL BREACH', x + 14 * ui, y + 16 * ui)
+    c.textAlign = 'right'
+    c.font = `700 ${13 * ui}px ${FONT}`
+    c.fillStyle = '#b8b2c8'
+    c.fillText(this.touch ? 'TAP THE ARROWS IN ORDER' : 'ARROWS / WASD   ESC LEAVE', x + w - 14 * ui, y + 16 * ui)
+    c.textAlign = 'center'
+    const glyph: Record<Dir, string> = { up: '▲', down: '▼', left: '◀', right: '▶' }
+    // Rivet sequence
+    const n = seq.length,
+      cell = Math.min(46 * ui, (w - 28 * ui) / n - 8)
+    const rowW = n * cell + (n - 1) * 8
+    for (let i = 0; i < n; i++) {
+      const cx = x + w / 2 - rowW / 2 + i * (cell + 8),
+        cy = y + 30 * ui
+      const done = i < g.patch!,
+        now = i === g.patch
+      c.fillStyle = done ? '#62e6ff' : now ? '#fff6e0' : '#2a3a4a'
+      c.fillRect(cx, cy, cell, cell * 0.8)
+      c.fillStyle = done ? '#0e1620' : now ? '#0e1620' : '#6a8aa0'
+      c.font = `900 ${cell * 0.45}px ${FONT}`
+      c.fillText(done ? '✓' : glyph[seq[i]], cx + cell / 2, cy + cell * 0.42)
+    }
+    // Direction buttons (mouse/touch)
+    this.rivetRects = []
+    const bw = (w - 28 * ui - 3 * 8) / 4,
+      bh = 30 * ui,
+      by = y + h - bh - 10 * ui
+    ;(['left', 'up', 'down', 'right'] as Dir[]).forEach((d, i) => {
+      const bx = x + 14 * ui + i * (bw + 8)
+      c.fillStyle = '#2a3a4a'
+      c.fillRect(bx, by, bw, bh)
+      c.fillStyle = '#bfe8ff'
+      c.font = `900 ${16 * ui}px ${FONT}`
+      c.fillText(glyph[d], bx + bw / 2, by + bh / 2 + 1)
+      this.rivetRects.push({ dir: d, x: bx, y: by, w: bw, h: bh })
+    })
+  }
+
+  /** Animated corner brackets around the tutorial's focus. */
+  private brackets(c: Ctx, f: Focus) {
+    const cx = this.sx(ax(f.x)),
+      bottom = this.sy(floorY[f.floor] + 4)
+    const pad = 4 + ((Math.sin(this.t * 5) + 1) / 2) * 5
+    const w = f.w * this.s + pad * 2,
+      h = f.h * this.s + pad * 2
+    const x0 = cx - w / 2,
+      y0 = bottom - h + pad,
+      L = Math.min(18, w / 3)
+    c.strokeStyle = '#ffd24a'
+    c.lineWidth = 3
+    c.beginPath()
+    for (const [x, y, dx, dy] of [
+      [x0, y0, 1, 1],
+      [x0 + w, y0, -1, 1],
+      [x0, y0 + h, 1, -1],
+      [x0 + w, y0 + h, -1, -1],
+    ]) {
+      c.moveTo(x + dx * L, y)
+      c.lineTo(x, y)
+      c.lineTo(x, y + dy * L)
+    }
+    c.stroke()
+  }
+
   /** Map a pointer on the canvas to a world interaction. */
   pointer(px: number, py: number) {
     const g = this.runner.game
@@ -1042,6 +1128,10 @@ export class Renderer {
     if (g.repairTicks !== null && gr.w && px >= gr.x && px <= gr.x + gr.w && py >= gr.y && py <= gr.y + gr.h) {
       this.runner.interact()
       return
+    }
+    if (g.patch !== null) {
+      const hit = this.rivetRects.find((r) => px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h)
+      if (hit) return this.runner.send({ type: 'rivet', dir: hit.dir })
     }
     const { x, y } = this.toArt(px, py)
     const pad = this.touch ? 8 : 4
@@ -1066,6 +1156,12 @@ export class Renderer {
         const gx0 = gx(slotX(s))
         return this.runner.goTo({ x: gx0, floor: f, act: held ? { type: 'stow', slot: s } : undefined })
       }
+    }
+    // Breach
+    if (g.breach) {
+      const b = breachSites[g.breach.site]
+      if (inBox(ax(b.x), floorY[b.floor] - 8, 36, 40))
+        return this.runner.goTo({ x: b.x, floor: b.floor, act: !held && g.phase === 'highway' ? { type: 'patch' } : undefined })
     }
     // Console
     if (inBox(CONSOLE_X, floorY[1], 36, 46))

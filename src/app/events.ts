@@ -1,6 +1,6 @@
 // Presentation events derived by diffing consecutive authoritative snapshots.
 // The simulation stays free of effects; the renderer and audio react to these.
-import { cargoIds, slots, type CargoId, type SlotId } from '../game/content'
+import { cargoIds, slots, type CargoId, type SiteId, type SlotId } from '../game/content'
 import type { Game } from '../game/simulation'
 
 export type GameEvent =
@@ -24,6 +24,13 @@ export type GameEvent =
   | { type: 'boarded' }
   | { type: 'stopCleared'; stop: number; bribed: boolean }
   | { type: 'outcome'; outcome: 'delivered' | 'arrest' | 'death' }
+  | { type: 'impact'; site: SiteId }
+  | { type: 'sealed'; site: SiteId }
+  | { type: 'patchOpen' }
+  | { type: 'patchClose' }
+  | { type: 'rivet'; progress: number }
+  | { type: 'slip' }
+  | { type: 'pulse'; id: CargoId }
 
 export function diff(a: Game, b: Game): GameEvent[] {
   if (a === b) return []
@@ -40,7 +47,8 @@ export function diff(a: Game, b: Game): GameEvent[] {
       else if (from.kind === 'held') out.push({ type: 'drop', id })
       else if (from.kind === 'slot') out.push({ type: 'ejected', id })
     }
-    if (b.items[id].condition < a.items[id].condition) out.push({ type: 'vent', id })
+    if (b.items[id].condition < a.items[id].condition)
+      out.push(b.items[id].agitation < a.items[id].agitation ? { type: 'pulse', id } : { type: 'vent', id })
   }
   if (b.hull < a.hull) out.push({ type: 'hullLoss', amount: a.hull - b.hull })
   if (!a.climb && b.climb) out.push({ type: 'climbStart', fromX: a.player.x })
@@ -51,6 +59,13 @@ export function diff(a: Game, b: Game): GameEvent[] {
   else if (a.repairTicks !== null && b.repairTicks === null && b.fault && b.phase === 'highway')
     out.push({ type: 'consoleClose' })
   else if (a.repairTicks !== null && b.repairTicks === 0 && a.repairTicks > 0) out.push({ type: 'repairMiss' })
+  if (!a.breach && b.breach) out.push({ type: 'impact', site: b.breach.site })
+  if (a.breach && !b.breach && b.phase === 'highway') out.push({ type: 'sealed', site: a.breach.site })
+  if (a.patch === null && b.patch !== null) out.push({ type: 'patchOpen' })
+  else if (a.patch !== null && b.patch === null && b.breach) out.push({ type: 'patchClose' })
+  else if (a.patch !== null && b.patch !== null && b.patch > a.patch) out.push({ type: 'rivet', progress: b.patch })
+  if (a.breach && b.breach && b.breach.slips > a.breach.slips) out.push({ type: 'slip' })
+  if (a.patch !== null && !b.breach && b.phase === 'highway') out.push({ type: 'rivet', progress: a.breach!.seq.length })
   if (a.phase === 'highway' && b.phase === 'prep') out.push({ type: 'prep' })
   if (a.phase === 'prep' && b.phase === 'search') out.push({ type: 'boarded' })
   if (a.phase === 'search' && (b.stop > a.stop || (b.phase === 'result' && b.outcome === 'delivered')))

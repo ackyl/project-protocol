@@ -93,6 +93,14 @@ kbd {
   inset: 0;
   overflow: hidden;
 }
+.world {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
 .stage {
   position: absolute;
   inset: 0;
@@ -203,7 +211,6 @@ kbd {
 .hud-hull.bad .hull-bar i.on {
   background: var(--red);
   box-shadow: inset 0 -4px 0 #9a1a2a;
-  animation: blink 0.6s steps(2) infinite;
 }
 .hud-num {
   font: italic 800 28px/1 var(--head);
@@ -213,7 +220,6 @@ kbd {
 .hud-drain {
   font: 800 15px/1 var(--head);
   color: var(--red);
-  animation: blink 0.8s steps(2) infinite;
 }
 @keyframes blink {
   50% {
@@ -286,7 +292,6 @@ kbd {
 }
 .pips i.now {
   background: var(--red);
-  animation: blink 0.7s steps(2) infinite;
 }
 .objective {
   max-width: min(520px, 60vw);
@@ -940,7 +945,6 @@ kbd {
   color: var(--ink);
   background: var(--amber);
   box-shadow: 0 4px 0 #7a3a14, 0 0 0 3px var(--ink);
-  animation: ready 1s ease-in-out infinite;
 }
 @keyframes ready {
   50% {
@@ -1136,5 +1140,478 @@ kbd {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition: none !important;
+  }
+}
+
+/* ── Cargo strip (HUD) ──────────────────────────────────────────────── */
+.hud-left {
+  display: grid;
+  gap: 6px;
+  justify-self: start;
+}
+.cargo-strip {
+  display: flex;
+  gap: 6px;
+}
+.cargo-chip {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 30px;
+  background: rgba(10, 6, 18, 0.8);
+  border: 2px solid #3a3050;
+  border-bottom-width: 4px;
+}
+.cargo-chip img {
+  width: 18px;
+  height: auto;
+  image-rendering: pixelated;
+}
+.cargo-chip i {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  bottom: -4px;
+  height: 4px;
+  background: #ff9a2a;
+  transform-origin: left;
+}
+.cargo-chip.ok {
+  border-color: #3aa86a;
+}
+.cargo-chip.warn {
+  border-color: var(--amber);
+}
+.cargo-chip.bad {
+  border-color: var(--red);
+  background: rgba(90, 10, 24, 0.85);
+}
+
+/* ── Tutorial objective + flash ─────────────────────────────────────── */
+.objective.training {
+  color: #fff6e0;
+  border-color: #ffd24a;
+  background: rgba(40, 30, 6, 0.85);
+}
+.objective.training b {
+  margin-right: 8px;
+  color: #ffd24a;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+.cleared {
+  margin-top: 4px;
+  padding: 3px 12px;
+  font: italic 900 18px/1 var(--head);
+  color: var(--ink);
+  background: var(--green);
+  animation: cleared 1.4s ease-out forwards;
+}
+@keyframes cleared {
+  0% {
+    transform: scale(1.4);
+    opacity: 0;
+  }
+  15% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* ── Text buttons ───────────────────────────────────────────────────── */
+.link {
+  display: block;
+  margin: 10px auto 0;
+  padding: 4px 8px;
+  font: 700 15px var(--head);
+  color: #6a4a2a;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.link:hover {
+  color: var(--ink);
+}
+.link.light {
+  margin: 0;
+  color: var(--muted);
+}
+.link.light:hover {
+  color: var(--text);
+}
+.link.dark kbd {
+  margin-left: 4px;
+}
+.ledger-actions {
+  flex-shrink: 0;
+}
+.pad.rivets button {
+  width: 62px;
+}
+
+/* ── Tutorial panels ────────────────────────────────────────────────── */
+.tut-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(6, 4, 14, 0.72);
+}
+.tut-panel {
+  width: min(640px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 0 26px 22px;
+  color: var(--text);
+  background: #17111f;
+  border: 4px solid var(--ink);
+  box-shadow: 0 0 0 3px #ffd24a, 10px 10px 0 rgba(0, 0, 0, 0.5);
+  clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
+  animation: rise 0.25s ease-out;
+}
+.tut-panel header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 0 -26px 14px;
+  padding: 8px 26px;
+  font: 800 14px var(--head);
+  letter-spacing: 2px;
+  color: var(--ink);
+  background: #ffd24a;
+}
+.tut-panel header .link {
+  color: #5a4210;
+}
+.tut-panel h2 {
+  font: italic 900 clamp(34px, 6vw, 52px) / 0.95 var(--head);
+  text-transform: uppercase;
+  color: #ffd24a;
+  text-shadow: 3px 3px 0 var(--ink);
+}
+.tut-panel > p {
+  margin-top: 10px;
+  font: 600 19px/1.25 var(--head);
+  color: #f0e8f8;
+}
+.tut-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin-top: 14px;
+  font: 700 17px var(--head);
+  color: var(--muted);
+}
+.tut-keys kbd {
+  margin-right: 4px;
+  font-size: 18px;
+}
+.tut-touch {
+  color: var(--cyan) !important;
+}
+.tut-goal {
+  margin-top: 14px;
+  padding: 8px 12px;
+  font: 800 17px var(--head);
+  color: var(--ink);
+  background: #ffd24a;
+  border-left: 6px solid var(--ink);
+}
+.tut-panel .go {
+  width: 100%;
+  margin-top: 16px;
+}
+
+/* Illustrations: transform/opacity animations only, and only while paused. */
+.ill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  min-height: 110px;
+  margin-top: 14px;
+  padding: 12px;
+  background: #0c0a16;
+  border: 2px solid #2a2236;
+}
+.ill img {
+  image-rendering: pixelated;
+}
+.ill .to {
+  font: 900 34px var(--head);
+  color: var(--muted);
+}
+.cargo-ill {
+  position: relative;
+  margin: 0;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+}
+.cargo-ill img,
+.cradle-ill img,
+.vault-ill img {
+  width: 56px;
+}
+.meter {
+  width: 60px;
+  height: 8px;
+  background: #2a1a1a;
+  border: 2px solid var(--ink);
+  overflow: hidden;
+}
+.meter i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #ffb02a, #ff2a3a);
+  transform-origin: left;
+  animation: fill 2.4s ease-in infinite;
+}
+.meter.bio i {
+  background: linear-gradient(90deg, #7dff6a, #ff3ac0);
+}
+@keyframes fill {
+  from {
+    transform: scaleX(0.05);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+.cradle-ill {
+  padding: 6px 10px 2px;
+  border: 4px solid #d9a830;
+  border-top-width: 6px;
+}
+.vault-ill {
+  padding: 6px 10px 2px;
+  border: 5px solid var(--teal, #34b3a4);
+  background: rgba(98, 230, 255, 0.15);
+}
+.rings::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border: 2px solid #7ff0dc;
+  border-radius: 50%;
+  animation: ring 1.2s ease-out infinite;
+}
+@keyframes ring {
+  from {
+    transform: scale(0.6);
+    opacity: 1;
+  }
+  to {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+.shake img {
+  animation: shake 0.25s steps(2) infinite;
+}
+@keyframes shake {
+  50% {
+    transform: translateX(3px);
+  }
+}
+.burst {
+  font: italic 900 30px var(--head);
+  color: #ff7ad8;
+  text-shadow: 2px 2px 0 var(--ink);
+}
+.tag {
+  padding: 4px 10px;
+  font: 800 14px var(--head);
+  letter-spacing: 1px;
+  color: #fff6e8;
+  background: #241a30;
+  border-bottom: 3px solid var(--muted);
+}
+.tag.ok {
+  border-color: var(--green);
+  color: var(--green);
+}
+.tag.warn {
+  border-color: var(--amber);
+  color: var(--amber);
+}
+.tag.bad {
+  border-color: var(--red);
+  color: #ff8a90;
+}
+.lock-ill {
+  position: relative;
+  width: 260px;
+  height: 34px;
+  background: #05030a;
+  border: 3px solid #3a3050;
+}
+.lock-ill .band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: #2f8a5a;
+}
+.lock-ill .needle {
+  position: absolute;
+  top: -6px;
+  bottom: -6px;
+  left: 0;
+  width: 4px;
+  background: #ffd24a;
+  animation: sweep 1.8s linear infinite alternate;
+}
+@keyframes sweep {
+  to {
+    transform: translateX(252px);
+  }
+}
+.rivet-ill {
+  display: flex;
+  gap: 8px;
+}
+.rivet-ill i {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 38px;
+  font: 900 22px var(--head);
+  font-style: normal;
+  color: #0e1620;
+  background: #2a3a4a;
+  animation: rivet 2s steps(1) infinite;
+}
+@keyframes rivet {
+  0% {
+    background: #fff6e0;
+  }
+  25%,
+  100% {
+    background: #62e6ff;
+  }
+}
+.ill-move {
+  gap: 10px;
+}
+.ill-move .walker {
+  width: 40px;
+  animation: walk 1.6s ease-in-out infinite alternate;
+}
+@keyframes walk {
+  from {
+    transform: translateX(-24px);
+  }
+  to {
+    transform: translateX(24px);
+  }
+}
+.ill-move .arr {
+  font: 900 26px var(--head);
+  color: var(--amber);
+}
+.ladder-ill {
+  display: grid;
+  justify-items: center;
+  margin-left: 18px;
+  font: 900 20px var(--head);
+  color: #f5c542;
+}
+.ladder-ill i {
+  width: 22px;
+  height: 56px;
+  border-left: 3px solid #f5c542;
+  border-right: 3px solid #f5c542;
+  background: repeating-linear-gradient(0deg, transparent 0 8px, #d9a830 8px 11px);
+}
+.btn-ill {
+  padding: 10px 16px;
+  font: italic 800 18px var(--head);
+  background: #2a2236;
+  border: 3px solid var(--ink);
+}
+.btn-ill.main {
+  color: var(--ink);
+  background: var(--amber);
+}
+.btn-ill.bad {
+  color: #ffb0a0;
+}
+.receipt-ill {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 4px 18px;
+  padding: 10px 16px;
+  font: 400 14px var(--mono);
+  color: var(--ink);
+  background: var(--paper);
+}
+.receipt-ill .plus {
+  color: #1f7a42;
+}
+.receipt-ill .minus {
+  color: #b01c2a;
+}
+@media (max-width: 700px), (max-height: 560px) {
+  .tut-panel {
+    padding: 0 16px 14px;
+  }
+  .tut-panel header {
+    margin: 0 -16px 10px;
+    padding: 6px 16px;
+  }
+  .tut-panel > p {
+    font-size: 16px;
+    margin-top: 6px;
+  }
+  .ill {
+    min-height: 80px;
+    margin-top: 8px;
+    padding: 8px;
+  }
+  .lock-ill {
+    width: 200px;
+  }
+  @keyframes sweep {
+    to {
+      transform: translateX(192px);
+    }
+  }
+}
+@media (max-height: 560px) {
+  .tut-panel h2 {
+    font-size: 30px;
+  }
+  .ill {
+    display: none;
+  }
+}
+
+/* Payday explains the receipt, so it must not cover it. */
+.tut-backdrop.aside {
+  place-items: center start;
+  background: rgba(6, 4, 14, 0.35);
+}
+.tut-backdrop.aside .tut-panel {
+  width: min(440px, 52vw);
+}
+@media (orientation: portrait) {
+  .tut-backdrop.aside {
+    place-items: start center;
+  }
+  .tut-backdrop.aside .tut-panel {
+    width: 100%;
+    max-height: 40%;
+  }
+  .tut-backdrop.aside .ill {
+    display: none;
   }
 }

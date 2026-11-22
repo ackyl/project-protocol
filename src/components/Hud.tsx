@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { rules, searchStops } from '../game/content'
-import { ledger } from '../game/customs'
+import { breachSites, cargo, cargoIds, rules, searchStops, type CargoId } from '../game/content'
+import { exposure, ledger } from '../game/customs'
+import { cargoIcon } from '../render/icons'
 import { heldItem, shielded, type Game } from '../game/simulation'
 import type { UiState } from '../app/runner'
 import { useReserve } from './reserve'
@@ -9,27 +10,70 @@ const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2,
 
 function objective(g: Game): { text: string; urgent?: boolean } | null {
   const held = heldItem(g)
-  const cell = g.items.cell.location.kind
+  const loc = (id: CargoId) => g.items[id].location.kind
+  const site = g.breach ? breachSites[g.breach.site].name : ''
   if (g.phase === 'highway') {
-    if (g.fault && held) return { text: 'Power fault! Put the cargo down and get to the console', urgent: true }
+    if (g.fault && g.breach) return { text: `Two emergencies! Console (upper deck, aft) and the ${site} breach`, urgent: true }
+    if ((g.fault || g.breach) && held) return { text: 'Emergency! Put the cargo down — stations need empty hands', urgent: true }
     if (g.fault) return { text: 'Power fault! Fix the console — upper deck, aft', urgent: true }
+    if (g.breach) return { text: `Hull breach at the ${site}! Patch it`, urgent: true }
+    if (g.items.specimen.agitation > 70 && loc('specimen') !== 'slot')
+      return { text: 'The specimen is about to pulse — contain it!', urgent: true }
     if (held === 'cell') return { text: 'Rack the cell before it vents' }
-    if (cell === 'loose') return { text: 'The cell is cooking — grab it and rack it', urgent: g.items.cell.heat > 60 }
+    if (loc('cell') === 'loose') return { text: 'The cell is cooking — grab it and rack it', urgent: g.items.cell.heat > 60 }
+    if (held === 'specimen') return { text: 'Contain the specimen in a free cradle' }
+    if (loc('specimen') === 'loose') return { text: 'The specimen is getting restless — contain it' }
     if (held === 'crate') return { text: 'Shield bay — lower deck, bow end' }
-    if (!shielded(g.items.crate)) return { text: 'The crate broadcasts — hide it in the shield bay' }
-    if (g.elapsed < rules.surge * rules.hz) return { text: 'Cargo secured. Stay sharp.' }
-    return { text: 'Hold course for Cinder Gate' }
+    if (!shielded(g.items.crate)) return { text: 'The crate broadcasts — only the shield bay hides it' }
+    return { text: 'Cargo secured. Stay sharp.' }
   }
   if (g.phase === 'prep') {
     if (held) return { text: 'Put it somewhere — hand-held cargo is found for sure', urgent: true }
-    if (cell === 'loose') return { text: 'Loose cargo is always found — rack the cell', urgent: true }
-    if (!shielded(g.items.crate)) return { text: 'Racks leak signal — only the shield bay hides the crate' }
+    const loose = cargoIds.find((id) => loc(id) === 'loose')
+    if (loose) return { text: `Loose cargo is always found — stow the ${cargo[loose].name}`, urgent: true }
+    const risky = cargoIds.filter((id) => exposure(g, id) > 0)
+    if (risky.length)
+      return { text: `${risky.map((id) => cargo[id].name).join(' & ')} can still be found — bribe or gamble` }
     return { text: 'Looks clean. Wait for the knock.' }
   }
   return null
 }
 
-export function Hud({ ui, muted, onMute, touch }: { ui: UiState; muted: boolean; onMute: () => void; touch: boolean }) {
+function CargoStrip({ g }: { g: Game }) {
+  return (
+    <div className="cargo-strip" aria-label="Cargo status">
+      {cargoIds.map((id) => {
+        const item = g.items[id]
+        const loc = item.location.kind
+        if (loc === 'surrendered') return null
+        const level = id === 'cell' ? item.heat : id === 'specimen' ? item.agitation : 0
+        const tone = level > 70 ? 'bad' : loc === 'slot' ? (id === 'crate' && !shielded(item) ? 'warn' : 'ok') : 'warn'
+        const status =
+          loc === 'slot' ? (id === 'crate' && !shielded(item) ? 'racked · loud' : 'secured') : loc === 'held' ? 'carried' : 'loose'
+        return (
+          <span key={id} className={'cargo-chip ' + tone} title={`${cargo[id].name}: ${status}`}>
+            <img src={cargoIcon(id)} alt="" width={18} height={19} />
+            {id !== 'crate' && <i style={{ transform: `scaleX(${Math.min(1, level / 100)})` }} />}
+          </span>
+        )
+      })}
+    </div>
+  )
+}
+
+export function Hud({
+  ui,
+  muted,
+  onMute,
+  touch,
+  training,
+}: {
+  ui: UiState
+  muted: boolean
+  onMute: () => void
+  touch: boolean
+  training: { objective: string | null; step: number; total: number; cleared: number } | null
+}) {
   const g = ui.game
   const top = useRef<HTMLDivElement>(null)
   useReserve(top, 'hud', 'top')
@@ -52,7 +96,7 @@ export function Hud({ ui, muted, onMute, touch }: { ui: UiState; muted: boolean;
 
   const seconds = Math.max(0, (g.phase === 'prep' ? rules.prep : rules.highway) - Math.floor(g.elapsed / rules.hz))
   const progress = g.phase === 'highway' ? g.elapsed / (rules.highway * rules.hz) : 1
-  const obj = objective(g)
+  const obj = training ? (training.objective ? { text: training.objective, training: true } : null) : objective(g)
   const wallet = g.phase === 'result' ? ledger(g).balance : g.cash
   const segs = 10
   const lit = Math.ceil((g.hull / rules.hull) * segs)
@@ -61,6 +105,7 @@ export function Hud({ ui, muted, onMute, touch }: { ui: UiState; muted: boolean;
   return (
     <>
       <div className="hud" ref={top}>
+        <div className="hud-left">
         <div className={`hud-hull ${hullTone}`} key={'h' + hit} data-hit={hit > 0}>
           <span className="hud-label">HULL</span>
           <span className="hull-bar" aria-hidden="true">
@@ -69,7 +114,13 @@ export function Hud({ ui, muted, onMute, touch }: { ui: UiState; muted: boolean;
             ))}
           </span>
           <b className="hud-num">{g.hull}</b>
-          {g.fault && g.phase === 'highway' && <span className="hud-drain">−{rules.surgeDamagePerSecond}/s</span>}
+          {g.phase === 'highway' && (g.fault || g.breach) && (
+            <span className="hud-drain">
+              −{(g.fault ? rules.surgeDamagePerSecond : 0) + (g.breach ? rules.breachDamagePerSecond : 0)}/s
+            </span>
+          )}
+        </div>
+        {(g.phase === 'highway' || g.phase === 'prep') && <CargoStrip g={g} />}
         </div>
 
         <div className="hud-center">
@@ -105,7 +156,20 @@ export function Hud({ ui, muted, onMute, touch }: { ui: UiState; muted: boolean;
             </>
           )}
           {g.phase === 'result' && <div className="route customs-tag">CONTRACT CLOSED</div>}
-          {obj && <div className={'objective' + (obj.urgent ? ' urgent' : '')} key={obj.text}>{obj.text}</div>}
+          {obj && (
+            <div
+              className={'objective' + ('urgent' in obj && obj.urgent ? ' urgent' : '') + ('training' in obj ? ' training' : '')}
+              key={obj.text}
+            >
+              {'training' in obj && (
+                <b>
+                  TRAINING {training!.step}/{training!.total}
+                </b>
+              )}
+              {obj.text}
+            </div>
+          )}
+          {training && training.cleared > 0 && <div className="cleared" key={'c' + training.cleared}>✓ Done</div>}
         </div>
 
         <div className="hud-right">
