@@ -105,3 +105,11 @@ export function search(g: Game, cmd: Command): Game {
   }
   return clearStop({ ...g, rng }, name + ' cleared.')
 }
+/**
+ * Detection chance an item would face where it currently sits, using the same
+ * rules as the search. Used to preview risk during customs preparation.
+ */
+export function exposure(g: Game, id: CargoId) {
+  const stop = searchStops.findIndex((_, i) => atStop({ ...g, stop: i }, id))
+  return stop < 0 ? 0 : detection({ ...g, stop }, id)
+}

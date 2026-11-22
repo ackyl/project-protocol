@@ -1,194 +1,99 @@
-import { ShipCanvas } from '../render/ShipCanvas'
-import { rules } from '../game/content'
-import { Manifest } from './Manifest'
-import { Contract } from './Contract'
-import { canClimb, mobile } from '../game/simulation'
-import { useFlight } from '../input/useFlight'
-import { Icon } from './Icon'
-import { Checkpoint, OutcomePanel } from './Checkpoint'
-import { FlightPanel, shortcut } from './FlightPanel'
-const time = (s: number) =>
-  Math.floor(s / 60)
-    .toString()
-    .padStart(2, '0') +
-  ':' +
-  (s % 60).toString().padStart(2, '0')
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { Runner } from '../app/runner'
+import { sfx } from '../audio/sfx'
+import { Renderer } from '../render/renderer'
+import { mobile } from '../game/simulation'
+import { Hud } from './Hud'
+import { Title } from './Title'
+import { Customs } from './Customs'
+import { Ledger } from './Ledger'
+import { TouchControls } from './TouchControls'
+import { ReserveContext, type Side } from './reserve'
+
 export function App() {
-  const { game: g, send, hold } = useFlight(shortcut)
-  const docked = g.phase === 'contract'
+  const runner = useMemo(() => new Runner(), [])
+  const ui = useSyncExternalStore(runner.subscribe, runner.getUi)
+  const canvas = useRef<HTMLCanvasElement>(null)
+  const [renderer, setRenderer] = useState<Renderer | null>(null)
+  const [touch, setTouch] = useState(() => matchMedia('(pointer: coarse)').matches)
+  const [muted, setMuted] = useState(sfx.muted)
+  const g = ui.game
+
+  useEffect(() => {
+    const r = new Renderer(canvas.current!, runner)
+    setRenderer(r)
+    runner.start()
+    if (import.meta.env.DEV) Object.assign(window, { __pp: { runner, renderer: r } })
+    return () => {
+      runner.stop()
+      r.destroy()
+    }
+  }, [runner])
+
+  useEffect(() => {
+    if (renderer) renderer.touch = touch
+  }, [renderer, touch])
+
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      sfx.unlock()
+      if (e.key.toLowerCase() === 'm' && !e.repeat && !e.metaKey && !e.ctrlKey) {
+        setMuted(sfx.toggleMute())
+        return
+      }
+      if (runner.keydown(e)) e.preventDefault()
+    }
+    const pointer = (e: PointerEvent) => {
+      sfx.unlock()
+      if (e.pointerType === 'touch') setTouch(true)
+      else if (e.pointerType === 'mouse') setTouch(false)
+    }
+    window.addEventListener('keydown', down)
+    window.addEventListener('keyup', runner.keyup)
+    window.addEventListener('pointerdown', pointer, true)
+    return () => {
+      window.removeEventListener('keydown', down)
+      window.removeEventListener('keyup', runner.keyup)
+      window.removeEventListener('pointerdown', pointer, true)
+    }
+  }, [runner])
+
+  const reserve = useMemo(() => {
+    const sizes = new Map<string, { side: Side; px: number }>()
+    return (key: string, side: Side, px: number | null) => {
+      if (px === null) sizes.delete(key)
+      else sizes.set(key, { side, px })
+      if (!renderer) return
+      const out = { top: 0, right: 0, bottom: 0, left: 0 }
+      for (const v of sizes.values()) out[v.side] = Math.max(out[v.side], v.px)
+      renderer.insets = out
+    }
+  }, [renderer])
+
   return (
-    <main className={docked ? 'docked' : 'running ' + g.phase}>
-      <header className="mast">
-        <div className="brand">
-          <span className="logomark" aria-hidden="true">
-            <i />
-            <i />
-            <i />
-          </span>
-          PROJECT <b>PROTOCOL</b>
-        </div>
-        <span className="online">
-          <i /> SYSTEM ONLINE
-        </span>
-      </header>
-      <div className="pagehead">
-        <div>
-          <div className="kicker">
-            <span className="tinyline" /> COURIER OPERATIONS
-          </div>
-          <h1>
-            Dispatch terminal<span>.</span>
-          </h1>
-        </div>
-        <span className="day">
-          DAY <b>01</b>
-        </span>
-      </div>
-      <div className="layout">
-        <div className="left">
-          <section className="panel vessel">
-            <div className="panel-title">
-              <Icon name="ship" />
-              <h2>Vessel telemetry</h2>
-              <span className="live">
-                <i /> {g.phase === 'result' ? 'LAST FRAME' : 'LIVE FEED'}
-              </span>
-            </div>
-            <div className="view">
-              <ShipCanvas game={g} />
-              <div className="vessel-name">
-                <small>FREIGHTER CLASS / F-07</small>
-                <strong>MULE–07</strong>
-              </div>
-              <span className="view-id">CAM 01 · CUTAWAY</span>
-              {mobile(g) && (
-                <div className="deck-labels">
-                  <span>POWER ↘</span>
-                  <span>RACK ↓</span>
-                  <span>↑ AFT RACK</span>
-                  <span>↑ SHIELD BAY</span>
-                </div>
-              )}
-            </div>
-            <div className="stats">
-              <div>
-                <small>
-                  <Icon name="hull" size={13} />
-                  HULL
-                </small>
-                <b>
-                  {g.hull}
-                  <em>%</em>
-                </b>
-              </div>
-              <div>
-                <small>
-                  <Icon name="clock" size={13} />
-                  {g.phase === 'prep' ? 'CUSTOMS' : 'TRANSIT'}
-                </small>
-                <b>
-                  {g.phase === 'search' || g.phase === 'result'
-                    ? '—'
-                    : time(
-                        Math.max(
-                          0,
-                          (g.phase === 'prep' ? rules.prep : rules.highway) -
-                            Math.floor(g.elapsed / rules.hz),
-                        ),
-                      )}
-                </b>
-              </div>
-              <div>
-                <small>
-                  <Icon name="bolt" size={13} />
-                  POWER
-                </small>
-                <b className={g.fault ? 'bad' : 'good'}>
-                  {g.outcome === 'death'
-                    ? 'Offline'
-                    : g.fault
-                      ? 'Fault'
-                      : 'Nominal'}
-                </b>
-              </div>
-            </div>
-          </section>
-          <Manifest game={g} />
-        </div>
-        <aside className="right">
-          {g.phase === 'result' ? (
-            <OutcomePanel g={g} send={send} />
-          ) : g.phase === 'search' ? (
-            <Checkpoint g={g} send={send} />
-          ) : !docked ? (
-            <FlightPanel g={g} send={send} />
-          ) : (
-            <Contract accept={() => send({ type: 'accept' })} />
-          )}
-          {(docked || (mobile(g) && g.repairTicks === null)) && (
-            <section className="panel control-panel">
-              <div className="panel-title">
-                <Icon name="controls" />
-                <h2>Courier controls</h2>
-              </div>
-              {mobile(g) ? (
-                <div className="pad">
-                  {([-1, 1] as const).map((d) => (
-                    <button
-                      key={d}
-                      disabled={!!g.climb || g.repairTicks !== null}
-                      aria-label={d < 0 ? 'Walk left' : 'Walk right'}
-                      onPointerDown={(e) => {
-                        e.currentTarget.setPointerCapture(e.pointerId)
-                        hold(e.pointerId, d)
-                      }}
-                      onLostPointerCapture={(e) => hold(e.pointerId, 0)}
-                      onPointerUp={(e) => hold(e.pointerId, 0)}
-                      onPointerCancel={(e) => hold(e.pointerId, 0)}
-                    >
-                      {d < 0 ? '←' : '→'}
-                    </button>
-                  ))}
-                  <button
-                    disabled={!canClimb(g, g.player.floor === 0 ? 1 : 0)}
-                    onClick={() =>
-                      send({ type: 'climb', to: g.player.floor === 0 ? 1 : 0 })
-                    }
-                  >
-                    Climb
-                  </button>
-                </div>
-              ) : (
-                <div className="keyguide">
-                  <p>
-                    Hold the arrows to walk. Use Climb at the center ladder.
-                  </p>
-                  <span>
-                    <kbd>A</kbd>
-                    <kbd>D</kbd> Walk
-                  </span>
-                  <span>
-                    <kbd>W</kbd>
-                    <kbd>S</kbd> Ladder
-                  </span>
-                  <span>
-                    <kbd>E</kbd> Interact
-                  </span>
-                  <span>
-                    <kbd>Q</kbd> Drop
-                  </span>
-                </div>
-              )}
-            </section>
-          )}
-        </aside>
-      </div>
-      <footer>
-        <span>
-          <i /> COURIER UPLINK ESTABLISHED
-        </span>
-        <span>MULE–07 / RELAY NINE</span>
-      </footer>
-    </main>
+    <ReserveContext.Provider value={reserve}>
+      <main className={`game phase-${g.phase} ${touch ? 'is-touch' : 'is-desk'}`}>
+        <canvas
+          ref={canvas}
+          className="stage"
+          aria-label="Mule-07 ship cutaway"
+          onPointerDown={(e) => {
+            if (e.button !== 0) return
+            const rect = e.currentTarget.getBoundingClientRect()
+            renderer?.pointer(e.clientX - rect.left, e.clientY - rect.top)
+          }}
+        />
+        {g.phase !== 'contract' && (
+          <Hud ui={ui} muted={muted} onMute={() => setMuted(sfx.toggleMute())} touch={touch} />
+        )}
+        {g.phase === 'contract' && <Title runner={runner} touch={touch} muted={muted} onMute={() => setMuted(sfx.toggleMute())} />}
+        {g.phase === 'search' && <Customs ui={ui} runner={runner} touch={touch} />}
+        {g.phase === 'result' && ui.resultShown && <Ledger g={g} runner={runner} touch={touch} />}
+        {touch && mobile(g) && <TouchControls g={g} runner={runner} />}
+        <p className="sr-only" role="status" aria-live="polite">
+          {g.note}
+        </p>
+      </main>
+    </ReserveContext.Provider>
   )
 }

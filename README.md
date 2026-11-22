@@ -11,20 +11,20 @@ npm install
 npm run dev
 ```
 
-Open the local address Vite prints. Accept **The Cinder Run** to start the 90-second clock.
+Open the local address Vite prints and take the job.
 
-| Action | Keyboard | Touch or mouse |
-| --- | --- | --- |
-| Walk | Hold A/D or left/right arrow | Hold a direction button |
-| Climb | W/up or S/down at the center ladder | Tap Climb at the ladder |
-| Pick up, stow or open the console | E for the first available action | Select the named action |
-| Drop carried cargo | Q | Drop |
-| Time a repair or leave the console | E to lock, Escape to leave | Lock phase or Leave |
-| Choose at customs, accept or restart | Tab or Shift+Tab, then Enter or Space | Select a button |
+| Action | Keyboard | Mouse | Touch |
+| --- | --- | --- | --- |
+| Walk | Hold A/D or ←/→ | Click a spot on either deck | Hold ◀ ▶, or tap a spot |
+| Ladder | W/↑ or S/↓ at the centre ladder (hold to climb on arrival) | Click the other deck or the ladder | ▲/▼ button, or tap the other deck |
+| Grab, stow, repair | E or Space (nearest prompt) | Click the cargo, slot or console | USE button, or tap the target |
+| Drop | Q | Click the courier | DROP button |
+| Lock repair / leave | E or Space / Esc or walk away | Click the gauge | USE (LOCK) / LEAVE |
+| Customs | E search · B bribe · 1/2 hand over | Buttons | Buttons |
+| Restart | R or Enter | Button | Button |
+| Sound | M | Speaker button | Speaker button |
 
-The orange cell starts on the lower deck. Bring it to a rack before its heat reaches 100%. The turquoise crate starts upstairs. The shield bay is on the lower right. A surge opens an ordinary latch holding the cell. At the upper-left console, use empty hands and lock the cursor inside the striped band. The highway clock keeps running.
-
-Use the 20 seconds before boarding to choose your final cargo locations. Customs displays each location's detection risk before you decide. Inspect to proceed, pay 25 credits to skip a location, or surrender an item there. After settlement, **Restart delivery** opens a fresh contract.
+The orange cell cooks while loose or carried. Rack it in a mustard cradle before it vents. The teal crate broadcasts until it sits in the shield bay (lower deck, bow end). Mid-run, a power surge blacks out the ship, blows ordinary rack latches and drains the hull until you win the phase-lock at the console (upper deck, aft). The clock never stops. When Cinder Gate appears, you have 20 seconds to hide everything. Customs then boards and checks five places. Each check costs you something.
 
 ## Verification and deployment
 
