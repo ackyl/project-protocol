@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { cargo, cargoIds, rules } from '../game/content'
+import { cargo, cargoIds, rules, type CargoId } from '../game/content'
 import { ledger } from '../game/customs'
 import type { Game } from '../game/simulation'
 import type { Runner } from '../app/runner'
@@ -15,26 +15,28 @@ const stamp = {
 
 export function Ledger({ g, runner, touch }: { g: Game; runner: Runner; touch: boolean }) {
   const book = ledger(g)
-  const s = stamp[g.outcome ?? 'death']
+  const s = g.outcome === 'delivered' && cargoIds.some((id) => ['surrendered', 'confiscated'].includes(g.items[id].location.kind))
+    ? { word: 'PARTIAL DELIVERY', tone: 'good', line: 'Cargo released with losses on file.' }
+    : stamp[g.outcome ?? 'death']
   const panel = useRef<HTMLElement>(null)
   const wide = window.innerWidth >= window.innerHeight * 1.15
   useReserve(panel, 'ledger', wide ? 'right' : 'bottom')
-  const rows: [string, number, string?][] = [
+  const rows: [string, number, CargoId?][] = [
     ['Wallet before the run', rules.startingCash],
-    ...cargoIds.map((id): [string, number, string] => {
+    ...cargoIds.map((id): [string, number, CargoId] => {
       const loc = g.items[id].location
       const why =
-        loc.kind === 'surrendered'
-          ? 'surrendered'
+        loc.kind === 'surrendered' || loc.kind === 'confiscated'
+          ? loc.kind
           : g.outcome === 'arrest'
             ? 'impounded'
             : g.outcome === 'death'
               ? 'lost'
-              : `${g.items[id].condition}% condition`
+              : 'released'
       return [`${cargo[id].name} · ${why}`, book.earnings[id], id]
     }),
   ]
-  if (book.bribes) rows.push(['Bribes', -book.bribes])
+  if (book.duty) rows.push(['Unlicensed freight duty', -book.duty])
   if (book.repairs) rows.push([`Hull repairs (${rules.hull - g.hull} pts)`, -book.repairs])
   if (book.penalty) rows.push([g.outcome === 'arrest' ? 'Impound fee' : 'Wreck recovery', -book.penalty])
 
@@ -58,11 +60,11 @@ export function Ledger({ g, runner, touch }: { g: Game; runner: Runner; touch: b
       <div className={'stamp ' + s.tone} id="result-word">
         {s.word}
       </div>
-      <p className="verdict">{s.line}</p>
+      <p className="verdict">{g.outcome === 'arrest' ? g.note : s.line}</p>
       <ol className="rows">
         {rows.map(([label, amount, id], i) => (
           <li key={label} style={{ animationDelay: 120 + i * 90 + 'ms' }}>
-            {id ? <img src={cargoIcon(id as 'cell' | 'crate')} alt="" width={21} height={22} /> : <i />}
+            {id ? <img src={cargoIcon(id)} alt="" width={21} height={22} /> : <i />}
             <span>{label}</span>
             <b className={amount > 0 ? 'plus' : amount < 0 ? 'minus' : ''}>
               {amount > 0 ? '+' : amount < 0 ? '−' : ''}

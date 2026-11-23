@@ -1,8 +1,10 @@
-import { finish, search, type Outcome } from './customs'
+import { board, finish, responsePoint, search, tickSearch, type Inspection, type Outcome, type Response } from './customs'
 import {
+  accepts,
   breachSites,
   cargo,
   cargoIds,
+  roomAt,
   rules,
   ship,
   slotIds,
@@ -11,6 +13,7 @@ import {
   type Dir,
   type Floor,
   type Point,
+  type RoomId,
   type SiteId,
   type SlotId,
 } from './content'
@@ -20,14 +23,9 @@ export type Location =
   | ({ kind: 'loose' } & Point)
   | { kind: 'held' }
   | { kind: 'slot'; slot: SlotId }
-  | { kind: 'surrendered' }
+  | { kind: 'surrendered' | 'confiscated' }
 export interface Item {
   location: Location
-  /** Volatile Cell heat, 0–100. */
-  heat: number
-  /** Bio Specimen agitation, 0–100. */
-  agitation: number
-  condition: number
 }
 export interface Breach {
   site: SiteId
@@ -37,11 +35,10 @@ export interface Breach {
 }
 /**
  * Guided first delivery. While `clock` is held, the highway clock and the
- * hazard schedule stand still; `dormant` cargo does not escalate yet.
+ * hazard schedule stand still.
  */
 export interface Training {
   clock: boolean
-  dormant: CargoId[]
 }
 export interface Game {
   phase: 'contract' | 'highway' | 'prep' | 'search' | 'result'
@@ -54,9 +51,10 @@ export interface Game {
   /** Ticks since departure; drives once-per-second effects. */
   ticks: number
   seed: number
-  rng: number
   cash: number
-  stop: number
+  inspection: Inspection | null
+  echo: RoomId | null
+  exposedTicks: number
   outcome: Outcome | null
   fault: boolean
   repairTicks: number | null
@@ -73,32 +71,34 @@ export type Command =
   | { type: 'pick'; id: CargoId }
   | { type: 'drop' }
   | { type: 'stow'; slot: SlotId }
-  | { type: 'repair' | 'stop' | 'leave' | 'inspect' | 'bribe' | 'restart' | 'newRun' | 'patch' }
+  | { type: 'repair' | 'stop' | 'leave' | 'inspect' | 'respond' | 'restart' | 'newRun' | 'patch' }
   | { type: 'rivet'; dir: Dir }
-  | { type: 'surrender'; id: CargoId }
+  | { type: 'hold'; response: Response }
   | { type: 'trigger'; hazard: 'surge' | 'impact' }
-  | { type: 'train'; clock?: boolean; wake?: CargoId; remaining?: number }
+  | { type: 'train'; clock?: boolean; remaining?: number }
 export type Direction = -1 | 0 | 1
 
 export function initial(seed: number = rules.seed): Game {
-  const item = (id: CargoId): Item => ({
-    location: { kind: 'loose', ...cargo[id].start },
-    heat: 0,
-    agitation: 0,
-    condition: 100,
-  })
+  const items = Object.fromEntries(cargoIds.map((id) => {
+    const start = cargo[id].start
+    const location: Location = typeof start === 'string'
+      ? { kind: 'slot', slot: start }
+      : { kind: 'loose', ...start }
+    return [id, { location }]
+  })) as Record<CargoId, Item>
   return {
     phase: 'contract',
     player: { ...ship.start },
     climb: null,
-    items: { cell: item('cell'), crate: item('crate'), specimen: item('specimen') },
+    items,
     hull: rules.hull,
     elapsed: 0,
     ticks: 0,
     seed,
-    rng: seed >>> 0,
     cash: rules.startingCash,
-    stop: 0,
+    inspection: null,
+    echo: null,
+    exposedTicks: 0,
     outcome: null,
     fault: false,
     repairTicks: null,
@@ -118,7 +118,7 @@ export function position(g: Game, id: CargoId): Point | undefined {
 export function near(g: Game, point: Point) {
   return g.player.floor === point.floor && Math.abs(g.player.x - point.x) <= rules.reach
 }
-export const mobile = (g: Game) => g.phase === 'highway' || g.phase === 'prep'
+export const mobile = (g: Game) => g.phase === 'highway' || g.phase === 'prep' || g.phase === 'search'
 /** The courier is busy at a station (console or breach patch). */
 export const working = (g: Game) => g.repairTicks !== null || g.patch !== null
 export function canClimb(g: Game, to: Floor) {
@@ -136,17 +136,23 @@ export const occupant = (g: Game, slot: SlotId) =>
     const loc = g.items[id].location
     return loc.kind === 'slot' && loc.slot === slot
   })
-export const shielded = (item: Item) => item.location.kind === 'slot' && slots[item.location.slot].shielded
-export const dormant = (g: Game, id: CargoId) => !!g.training?.dormant.includes(id)
+export function caskSealed(g: Game) {
+  const location = g.items.cask.location
+  return location.kind === 'slot' && location.slot === 'cradle' && (g.phase !== 'highway' || !g.fault)
+}
 /** First tick of a scheduled hazard of this kind, if one is still pending. */
 export const hazardAt = (g: Game, kind: Hazard['kind']) => g.schedule.find((h) => h.kind === kind)?.at
 
 export function contextActions(g: Game): { label: string; cmd: Command }[] {
   if (!mobile(g) || g.climb || working(g)) return []
+  if (g.phase === 'search') {
+    const p = responsePoint(g)
+    return p && near(g, p) ? [{ label: 'File response', cmd: { type: 'respond' } }] : []
+  }
   const held = heldItem(g)
   if (held)
     return slotIds
-      .filter((id) => near(g, slots[id]) && !occupant(g, id))
+      .filter((id) => near(g, slots[id]) && !occupant(g, id) && accepts(id, held))
       .map((slot) => ({ label: 'Stow in ' + slots[slot].name, cmd: { type: 'stow', slot } }))
   const actions: { label: string; cmd: Command }[] = []
   if (g.fault && g.phase === 'highway' && near(g, ship.station))
@@ -169,17 +175,7 @@ function relocate(g: Game, id: CargoId, location: Location, note: string): Game 
 // ── Hazards ──────────────────────────────────────────────────────────────
 function surge(g: Game): Game {
   if (g.fault) return g
-  g = { ...g, fault: true, note: 'Surge! Power bus down and the hull is draining. Ordinary rack latches failed.' }
-  for (const id of cargoIds) {
-    if (cargo[id].kind !== 'thermal') continue
-    let item = g.items[id]
-    if (shielded(item) || item.location.kind === 'surrendered') continue
-    const p = position(g, id)!
-    const location: Location = item.location.kind === 'slot' ? { kind: 'loose', x: p.x, floor: p.floor } : item.location
-    item = { ...item, location, heat: Math.max(item.heat, rules.surgeHeat) }
-    g = { ...g, items: { ...g.items, [id]: item } }
-  }
-  return g
+  return { ...g, fault: true, note: 'Power bus down. The cradle is losing containment.' }
 }
 function impact(g: Game, site: SiteId, seq: Dir[]): Game {
   if (g.breach) return g
@@ -194,14 +190,14 @@ function impact(g: Game, site: SiteId, seq: Dir[]): Game {
 export function command(g: Game, cmd: Command): Game {
   if (cmd.type === 'restart' && g.phase === 'result') return initial(g.seed)
   if (cmd.type === 'newRun' && g.phase === 'result') return initial(nextSeed(g.seed))
-  if (g.phase === 'search') return search(g, cmd)
+  if (g.phase === 'search' && cmd.type !== 'climb') return search(g, cmd)
   if (cmd.type === 'accept' && g.phase === 'contract')
     return cmd.training
       ? {
           ...g,
           phase: 'highway',
           schedule: [],
-          training: { clock: true, dormant: ['cell', 'specimen'] },
+          training: { clock: true },
           note: 'Training run. The clock holds until the drills are done.',
         }
       : { ...g, phase: 'highway', note: 'Underway. Secure the loose cargo.' }
@@ -213,7 +209,6 @@ export function command(g: Game, cmd: Command): Game {
     if (cmd.type === 'train') {
       const training: Training = {
         clock: cmd.clock ?? g.training.clock,
-        dormant: g.training.dormant.filter((id) => id !== cmd.wake && cmd.clock !== false),
       }
       const elapsed =
         cmd.remaining !== undefined
@@ -260,7 +255,7 @@ export function command(g: Game, cmd: Command): Game {
   }
   if (cmd.type === 'drop' && held)
     return relocate(g, held, { kind: 'loose', ...g.player }, 'Dropped ' + cargo[held].name + '.')
-  if (cmd.type === 'stow' && held && near(g, slots[cmd.slot]) && !occupant(g, cmd.slot))
+  if (cmd.type === 'stow' && held && near(g, slots[cmd.slot]) && !occupant(g, cmd.slot) && accepts(cmd.slot, held))
     return relocate(
       g,
       held,
@@ -292,9 +287,10 @@ export function tick(g: Game, direction: Direction = 0): Game {
   }
   if (next.phase === 'prep') {
     if (next.elapsed >= rules.prep * rules.hz)
-      return { ...next, phase: 'search', climb: null, note: 'Customs has boarded.' }
+      return board(next)
     return next
   }
+  if (next.phase === 'search') return tickSearch(next)
   if (next.repairTicks !== null) next.repairTicks++
   return transit(next)
 }
@@ -308,44 +304,12 @@ function transit(g: Game): Game {
         g = h.kind === 'surge' ? surge(g) : impact(g, h.site!, h.seq!)
       }
   if (fired.size) g = { ...g, schedule: g.schedule.filter((h) => h.at !== g.elapsed) }
-  // Volatile Cell: heats while loose or carried, cools in any slot, vents at the limit.
-  for (const id of cargoIds) {
-    if (cargo[id].kind !== 'thermal') continue
-    const item = g.items[id]
-    if (item.location.kind === 'surrendered') continue
-    let heat =
-      item.location.kind === 'slot'
-        ? Math.max(0, item.heat - rules.coolingPerSecond / rules.hz)
-        : dormant(g, id)
-          ? item.heat
-          : item.heat + rules.heatPerSecond / rules.hz
-    let condition = item.condition
-    if (heat >= rules.heatLimit - 1e-6) {
-      heat = 0
-      condition = Math.max(0, condition - rules.conditionLoss)
-      g = { ...g, hull: Math.max(0, g.hull - rules.blastDamage), note: 'Cell vented! Hull and cargo damaged.' }
-    }
-    if (heat !== item.heat) g = { ...g, items: { ...g.items, [id]: { ...item, heat, condition } } }
-  }
-  // Bio Specimen: agitated outside containment and when a rack loses power.
-  for (const id of cargoIds) {
-    if (cargo[id].kind !== 'bio') continue
-    const item = g.items[id]
-    const loc = item.location
-    if (loc.kind === 'surrendered') continue
-    const rate =
-      loc.kind === 'slot'
-        ? slots[loc.slot].shielded || !g.fault
-          ? -rules.agitationReliefPerSecond
-          : rules.agitationFaultPerSecond
-        : dormant(g, id)
-          ? 0
-          : rules.agitationPerSecond
-    let agitation = Math.min(rules.agitationLimit, Math.max(0, item.agitation + rate / rules.hz))
-    if (agitation !== item.agitation) g = { ...g, items: { ...g.items, [id]: { ...item, agitation } } }
-    if (agitation >= rules.agitationLimit - 1e-6) {
-      agitation = rules.pulseReset
-      g = pulse(g, id, agitation)
+  if (!g.echo) {
+    const exposedTicks = caskSealed(g) ? 0 : g.exposedTicks + 1
+    g = { ...g, exposedTicks }
+    if (exposedTicks >= rules.echoSeconds * rules.hz) {
+      const echo = roomAt(position(g, 'cask')!)
+      g = { ...g, echo, note: 'Containment failed. A residual echo remains in the compartment.' }
     }
   }
   if (g.ticks % rules.hz === 0) {
@@ -363,29 +327,7 @@ function transit(g: Game): Game {
       repairTicks: null,
       patch: null,
       training: null,
-      note: 'Checkpoint ahead. Hide what you can.',
+      note: 'Checkpoint ahead. Verify the manifest and containment.',
     }
   return g
-}
-
-/**
- * The specimen lashes out: it loses condition, blows the ordinary rack latches
- * on its deck and scrambles any station being worked on that deck.
- */
-function pulse(g: Game, id: CargoId, agitation: number): Game {
-  const deck = position(g, id)!.floor
-  const items = { ...g.items, [id]: { ...g.items[id], agitation, condition: Math.max(0, g.items[id].condition - rules.pulseConditionLoss) } }
-  for (const other of cargoIds) {
-    const loc = items[other].location
-    if (loc.kind === 'slot' && !slots[loc.slot].shielded && slots[loc.slot].floor === deck)
-      items[other] = { ...items[other], location: { kind: 'loose', x: slots[loc.slot].x, floor: deck } }
-  }
-  const onDeck = g.player.floor === deck
-  return {
-    ...g,
-    items,
-    repairTicks: onDeck ? null : g.repairTicks,
-    patch: onDeck ? null : g.patch,
-    note: 'Specimen pulse! Rack latches on that deck blew open.',
-  }
 }

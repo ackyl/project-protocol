@@ -1,5 +1,33 @@
 # Project Protocol — Development status
 
+## Current slice: mixed-manifest Cinder Run
+
+One delivery is playable from the job ticket through settlement and replay. Legal bearing drums explain the signature of a relay bank hidden behind them. The Choir Cask can leave evidence during a power failure that remains after the console is repaired. Cargo placement determines what customs finds, and the courier can physically file a citation or surrender before a scan. The receipt distinguishes complete delivery, partial delivery, impound, and hull failure.
+
+Mule–07 has four searchable compartments, two decks, one ladder, and a player-follow camera. The HUD marks offscreen emergencies, the officer’s destination, and the room with a residual echo. The guided run teaches the new loadout and search and can be skipped or replayed.
+
+### Design and tuning decisions
+
+- The approved follow camera replaces whole-ship framing in active play. The walkable span grew from 298 to 372 units. Transit, prep, and the two repair minigames keep their basic rules.
+- A fitted front load blocks a surface view of the rear. Compatible cover creates a corroboratable +1 heat clue. Unmatched heat counts +2 so using the wrong cover can open the rack without a second mistake. An unsupported citation can add the Containment audit.
+- A cask remains physically latched when the cradle loses power. Four continuous seconds unsealed record one echo. Shore power stabilizes the cradle at the gate without erasing the trace. Freight still in hand at boarding is set down in place so its search room stays fixed.
+- Customs review is untimed. Selecting a response starts one eight-second hold per stop. The officer keeps the same room route during the hold. At maximum suspicion, Containment joins the route if it was not already queued.
+- The impact gap on deliberately overlapping routes is 1–4 s. The wider 2–5 s gap produced fewer simultaneous repairs for the scripted courier after the layout changed. The fairness suite exercises 150 routes.
+- The current slice uses one fixed manifest and one anomaly behavior. Additional manifests, bribery, forgery, diversion, and the five-day campaign remain future work.
+
+### Verification for the mixed-manifest slice
+
+- `npm run typecheck`, `npm run test` (42 tests in 7 suites), and `npm run build` passed on Node 24.14.1. `npm run preview` served the production build.
+- **1280×800 desktop, production preview:** guided route from loading through both repairs, a deeper search avoided by walking to cite the manifest, full cargo payout, and same-route replay.
+- **390×844 portrait, production preview:** touch walking, grab, stow, ladder, and a timed surrender that required walking across decks. Partial delivery receipt and restart button visible.
+- **375×667 short portrait, production preview:** touch movement and cargo actions, echo after a prolonged fault, escalated Containment search, impound fee, reserve shortfall, and restart button visible.
+- **390×844 portrait, development build:** real canvas taps tracked the moving camera, picked up the cask, dropped it through the touch controls, and resealed it in the cradle.
+- Browser runs used Chrome with touch emulation and advanced the browser clock between inputs. Physical phones, Safari, Firefox, the audio mix, and an uninterrupted real-time human playthrough remain unverified.
+
+## Historical prototype before the mixed-manifest redesign
+
+The remainder of this file records earlier rules and milestones. For the current rules, see [Mechanics](MECHANICS.md).
+
 ## Playable slice
 
 The Cinder Run is complete from contract acceptance to final settlement and restart. Since chunk 2 the player handles three physical cargo items, survives two seeded emergency types, and first-time players are guided through it by an interactive tutorial. The original slice handled two physical cargo items, crosses two decks, repairs a live highway fault, prepares for customs, and makes a separate decision at each search location. The ledger distinguishes cargo income, surrender, arrest, hull damage, death and debt.
@@ -166,7 +194,7 @@ Layout defects found and fixed during these checks:
 
 The game-first redesign above replaced M4's presentation work.
 
-## Where things stand (handoff for design ideation)
+## Handoff before the mixed-manifest redesign
 
 - **Built:** one complete delivery, the Cinder Run, with a guided first-time version.
   - Three cargo types: heat, signal and bio.
@@ -174,9 +202,9 @@ The game-first redesign above replaced M4's presentation work.
   - Two seeded emergencies: a power surge with a timing lock, and a hull breach with a rivet sequence.
   - A five-stop customs search with inspect, bribe and surrender.
   - Three distinct failures (arrest, hull death, debt warning) and a ledger.
-- **Fixed by the [high-level GDD](HIGH_LEVEL_GAME_DESIGN_DOCUMENT.md):** side view, two decks, the whole playable ship on one screen, walking and ladders with no jumping, physically carried cargo, station minigames rather than hold-to-repair, a real-time highway countdown, timed prep then an interactive search, one delivery per day, and different consequences for different failures.
+- **Design at that milestone:** side view, two decks, the whole playable ship on one screen, walking and ladders with no jumping, physically carried cargo, station minigames rather than hold-to-repair, a real-time highway countdown, timed prep then an interactive search, one delivery per day, and different consequences for different failures.
 - **Core tension to design around:** two problems at once while the courier can be in only one place.
-- **Not built yet ([high-level GDD](HIGH_LEVEL_GAME_DESIGN_DOCUMENT.md) future scope, chunk 3):** five-day campaign and weekly syndicate quota, shop and upgrades between days, escalating director settings, music, and save.
+- **Campaign scope at the time:** five-day campaign and weekly syndicate quota, shop and upgrades between days, escalating director settings, music, and save.
 - **Open questions worth ideating:**
   - What does the shop sell?
   - How do days escalate (new hazards, ship layouts, customs behaviour)?

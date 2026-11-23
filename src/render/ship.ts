@@ -2,6 +2,8 @@
 import { box, disc, glow, hash, hazardStripe, mix, pal, poly, r, type Ctx } from './pixel'
 import {
   AIRLOCK_X,
+  BOW_SHIFT,
+  ax,
   CONSOLE_X,
   INNER_L,
   INNER_R,
@@ -11,7 +13,7 @@ import {
   floorY,
   slotX,
 } from './world'
-import type { Floor } from '../game/content'
+import { roomIds, rooms, type Floor } from '../game/content'
 
 const U = floorY[1],
   L = floorY[0]
@@ -68,7 +70,11 @@ function hullShell(c: Ctx) {
   c.save()
   c.lineJoin = 'miter'
   c.beginPath()
-  outline.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y)))
+  outline.forEach(([x, y], i) => {
+    const at = x >= 528 ? x + BOW_SHIFT : x
+    if (i) c.lineTo(at, y)
+    else c.moveTo(at, y)
+  })
   c.closePath()
   c.lineWidth = 4
   c.strokeStyle = pal.ink
@@ -77,13 +83,13 @@ function hullShell(c: Ctx) {
   c.fill()
   c.restore()
   // Plating bands and highlights
-  r(c, pal.hull2, 124, 52, 404, 3)
+  r(c, pal.hull2, 124, 52, 404 + BOW_SHIFT, 3)
   r(c, pal.hull3, 132, 51, 80, 1)
   r(c, pal.hull3, 222, 43, 88, 1)
   r(c, pal.hull2, 222, 44, 88, 6)
-  r(c, pal.hull0, 124, 206, 420, 8)
-  r(c, pal.hull2, 124, 198, 420, 2)
-  for (let x = 140; x < 530; x += 22) {
+  r(c, pal.hull0, 124, 206, 420 + BOW_SHIFT, 8)
+  r(c, pal.hull2, 124, 198, 420 + BOW_SHIFT, 2)
+  for (let x = 140; x < INNER_R; x += 22) {
     r(c, pal.hull0, x, 55, 1, 9)
     r(c, pal.hull0, x + 8, 200, 1, 6)
     r(c, pal.hull3, x + 4, 57, 1, 1)
@@ -126,6 +132,8 @@ function hullShell(c: Ctx) {
     r(c, pal.hull3, x - 3, 228, 56, 1)
     hazardStripe(c, x + 12, 218, 26, 4)
   }
+  c.save()
+  c.translate(BOW_SHIFT, 0)
   // Nose: armored lower prow with the hull number
   poly(c, pal.ink, [[528, 140], [640, 140], [646, 152], [636, 176], [600, 202], [548, 214], [528, 214]])
   poly(c, pal.rust1, [[530, 142], [638, 142], [643, 152], [634, 174], [598, 199], [548, 211], [530, 211]])
@@ -148,6 +156,7 @@ function hullShell(c: Ctx) {
   poly(c, '#2a5a6e', [[532, 68], [554, 68], [588, 95], [616, 122], [616, 134], [532, 134]])
   poly(c, '#3f87a0', [[556, 72], [580, 92], [574, 92], [550, 72]])
   poly(c, '#6fc3d8', [[560, 74], [566, 79], [563, 79], [557, 74]])
+  c.restore()
 }
 
 function wall(c: Ctx, f: Floor) {
@@ -312,8 +321,7 @@ function forwardHold(c: Ctx) {
   r(c, pal.ink, INNER_R - 11, y - 40, 8, 12)
   r(c, '#3f87a0', INNER_R - 10, y - 39, 6, 10)
   r(c, pal.hazard, INNER_R - 12, y - 24, 2, 4)
-  // Floor marking under the rack
-  hazardStripe(c, slotX('upper') - 18, y - 1, 36, 1)
+
 }
 
 function machineRoom(c: Ctx) {
@@ -337,7 +345,7 @@ function machineRoom(c: Ctx) {
   disc(c, pal.hull0, 238, y - 18, 9)
   hazardStripe(c, 220, y - 4, 36, 3)
   // Floor marking under the rack
-  hazardStripe(c, slotX('aft') - 18, y - 1, 36, 1)
+  hazardStripe(c, slotX('front') - 18, y - 1, 36, 1)
 }
 
 function hold(c: Ctx) {
@@ -358,18 +366,18 @@ function hold(c: Ctx) {
   for (let x = 268; x < 316; x += 8) r(c, '#8a7a3a', x, y - 1, 4, 1)
 }
 
-function shieldWing(c: Ctx) {
+function containmentWing(c: Ctx) {
   const y = L
   // Lead-lined locker wall
   box(c, 400, y - 50, 32, 50, '#2c3242', '#3c4458', '#20242f')
   for (let i = 0; i < 4; i++) r(c, pal.ink, 403, y - 44 + i * 11, 26, 1)
   r(c, pal.teal1, 427, y - 30, 2, 6)
   // Airlock
-  box(c, AIRLOCK_X - 10, y - 50, 20, 50, pal.hull2, pal.hull3, pal.hull1)
-  r(c, pal.ink, AIRLOCK_X - 1, y - 48, 2, 46)
-  hazardStripe(c, AIRLOCK_X - 9, y - 50, 18, 3)
-  disc(c, pal.ink, AIRLOCK_X, y - 30, 4)
-  disc(c, '#2a5a6e', AIRLOCK_X, y - 30, 3)
+  box(c, AIRLOCK_X - 10, U - 50, 20, 50, pal.hull2, pal.hull3, pal.hull1)
+  r(c, pal.ink, AIRLOCK_X - 1, U - 48, 2, 46)
+  hazardStripe(c, AIRLOCK_X - 9, U - 50, 18, 3)
+  disc(c, pal.ink, AIRLOCK_X, U - 30, 4)
+  disc(c, '#2a5a6e', AIRLOCK_X, U - 30, 3)
 }
 
 export function drawShipStatic(c: Ctx) {
@@ -383,17 +391,32 @@ export function drawShipStatic(c: Ctx) {
   forwardHold(c)
   machineRoom(c)
   hold(c)
-  shieldWing(c)
+  containmentWing(c)
   for (const f of [0, 1] as Floor[]) for (const x of RIBS) rib(c, x, f)
   floor(c, 1)
   floor(c, 0)
   ladder(c)
+  for (const id of roomIds) {
+    const p = rooms[id].post
+    const x = Math.round(ax(p.x))
+    const y = floorY[p.floor]
+    r(c, '#221e1c', x - 8, y - 40, 16, 12)
+    r(c, '#88775a', x - 7, y - 39, 14, 10)
+    r(c, '#d0bf9a', x - 4, y - 38, 8, 7)
+    r(c, '#6f6454', x - 3, y - 36, 6, 1)
+    r(c, '#6f6454', x - 3, y - 34, 4, 1)
+  }
+  // Walkway marking links the two positions of the paired rack.
+  hazardStripe(c, slotX('front') - 18, L + 2, slotX('rear') - slotX('front') + 36, 2)
+  c.save()
+  c.translate(BOW_SHIFT, 0)
   // Cockpit interior: seat and dash under the glazing
   box(c, 536, 106, 30, 18, pal.hull2, pal.hull3)
   r(c, pal.ink, 540, 98, 4, 10)
   box(c, 544, 88, 12, 22, '#5a3a3a', '#7a5048')
   r(c, pal.ink, 528, 124, 98, 16)
   r(c, pal.hull1, 530, 125, 88, 12)
+  c.restore()
 }
 
 // ── Animated machinery ───────────────────────────────────────────────────
@@ -440,10 +463,10 @@ export function machinery(c: Ctx, s: ShipLook) {
   // Coffee machine light
   r(c, (Math.floor(s.t * 2) % 2 && p > 0.5) ? pal.red : pal.red0, 304, U - 28, 2, 1)
   // Airlock status lamp
-  r(c, s.airlockOpen > 0 ? pal.red : pal.green, AIRLOCK_X - 2, L - 47, 4, 1)
+  r(c, s.airlockOpen > 0 ? pal.red : pal.green, AIRLOCK_X - 2, U - 47, 4, 1)
   // Cockpit dash blinkers (autopilot)
   for (let i = 0; i < 5; i++)
-    r(c, (Math.floor(s.t * 3 + i * 1.3) % 3 === 0) ? '#ffcf5a' : '#5ae0a0', 534 + i * 5, 127, 3, 2)
+    r(c, (Math.floor(s.t * 3 + i * 1.3) % 3 === 0) ? '#ffcf5a' : '#5ae0a0', 534 + BOW_SHIFT + i * 5, 127, 3, 2)
 }
 
 export function consoleScreen(c: Ctx, s: ShipLook, open: boolean) {
@@ -525,8 +548,8 @@ export function rackFront(c: Ctx, x: number, f: Floor, occupied: boolean, t: num
   }
 }
 
-export function vaultBack(c: Ctx, t: number) {
-  const x = slotX('vault'),
+export function cradleBack(c: Ctx, t: number) {
+  const x = slotX('cradle'),
     y = L
   r(c, pal.ink, x - 20, y - 46, 40, 46)
   r(c, '#1c2432', x - 18, y - 44, 36, 42)
@@ -537,8 +560,8 @@ export function vaultBack(c: Ctx, t: number) {
   void t
 }
 
-export function vaultFront(c: Ctx, t: number, occupied: boolean, power: number) {
-  const x = slotX('vault'),
+export function cradleFront(c: Ctx, t: number, occupied: boolean, power: number) {
+  const x = slotX('cradle'),
     y = L
   for (const s of [-1, 1]) {
     const px = s < 0 ? x - 22 : x + 16

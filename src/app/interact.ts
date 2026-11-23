@@ -1,4 +1,5 @@
 import { breachSites, cargo, ship, slots, type Point } from '../game/content'
+import { responsePoint } from '../game/customs'
 import { contextActions, position, type Command, type Game } from '../game/simulation'
 
 export interface Action {
@@ -9,6 +10,10 @@ export interface Action {
 }
 
 function describe(g: Game, cmd: Command): Action | undefined {
+  if (cmd.type === 'respond') {
+    const at = responsePoint(g)
+    return at && { cmd, verb: 'File', noun: 'Customs response', at }
+  }
   if (cmd.type === 'stow')
     return { cmd, verb: 'Stow', noun: slots[cmd.slot].name, at: slots[cmd.slot] }
   if (cmd.type === 'repair') return { cmd, verb: 'Repair', noun: 'Power console', at: ship.station }

@@ -1,9 +1,9 @@
 // Full-screen game renderer. A low-resolution pixel-art world is drawn into an
 // offscreen buffer, sharply upscaled to the display, then crisp world-anchored
 // UI (prompts, gauges, callouts) is drawn on top at display resolution.
-import { breachSites, cargo, cargoIds, rules, searchStops, ship, type CargoId, type Dir, type Floor, type SiteId } from '../game/content'
-import { atStop, detection, exposure } from '../game/customs'
-import { canClimb, cursor, heldItem, mobile, position, shielded, type Game } from '../game/simulation'
+import { accepts, breachSites, cargoIds, roomIds, rooms, rules, ship, slotIds, slots, type Dir, type Floor, type RoomId, type SiteId } from '../game/content'
+import { briefing, cargoStatus, currentRoom, responsePoint } from '../game/customs'
+import { canClimb, caskSealed, cursor, heldItem, mobile, occupant, position, type Game } from '../game/simulation'
 import type { GameEvent } from '../app/events'
 import { actions } from '../app/interact'
 import type { Runner } from '../app/runner'
@@ -19,16 +19,17 @@ import {
   rackBack,
   rackFront,
   slotHint,
-  vaultBack,
-  vaultFront,
+  cradleBack,
+  cradleFront,
   type ShipLook,
 } from './ship'
 import { debris, space, type Scene } from './space'
-import { agitationGauge, breachHole, cell, courier, crate, heatGauge, officer, patchPlate, signalRings, specimen, type Pose } from './sprites'
+import { breachHole, cargoSprite, courier, officer, patchPlate, type Pose } from './sprites'
 import {
   AIRLOCK_X,
   BOUNDS,
   BOUNDS_TIGHT,
+  SX,
   CONSOLE_X,
   INNER_L,
   INNER_R,
@@ -59,7 +60,7 @@ const FONT = '"Barlow Condensed", "Arial Narrow", sans-serif'
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
 
-const LAMPS = [168, 236, 300, 362, 430, 494]
+const LAMPS = [168, 236, 300, 362, 430, 494, 552, 597]
 const DAMAGE = [
   [186, 56],
   [300, 46],
@@ -71,13 +72,9 @@ const DAMAGE = [
   [364, 212],
 ] as const
 
-/** Where the officer stands for each search stop. */
-function stopSpot(id: string): { x: number; floor: Floor; face: 1 | -1 } {
-  if (id === 'lower') return { x: 300, floor: 0, face: -1 }
-  if (id === 'top') return { x: 300, floor: 1, face: -1 }
-  if (id === 'aft') return { x: slotX('aft') + 26, floor: 0, face: -1 }
-  if (id === 'upper') return { x: slotX('upper') + 26, floor: 1, face: -1 }
-  return { x: slotX('vault') + 30, floor: 0, face: -1 }
+function stopSpot(id: RoomId): { x: number; floor: Floor; face: 1 | -1 } {
+  const p = rooms[id].post
+  return { ...p, x: ax(p.x), face: id === 'containment' ? 1 : -1 }
 }
 
 export class Renderer {
@@ -93,6 +90,7 @@ export class Renderer {
   private s = 0
   private camX = 0
   private camY = 0
+  private followX: number | null = null
   private t = 0
   private now = 0
   // Visual state
@@ -106,11 +104,11 @@ export class Renderer {
   private speed = 0
   private banners: Banner[] = []
   private gaugeFlash: { color: string; until: number } | null = null
-  private officer = { x: AIRLOCK_X, floor: 0 as Floor, face: -1 as 1 | -1, step: 0, walking: false, climb: 0, visible: false, leaving: false }
+  private officer = { x: AIRLOCK_X, floor: 1 as Floor, face: -1 as 1 | -1, step: 0, walking: false, climb: 0, visible: false, leaving: false }
   private gaugeRect = { x: 0, y: 0, w: 0, h: 0 }
   private rivetRects: { dir: Dir; x: number; y: number; w: number; h: number }[] = []
   private patched = new Set<SiteId>()
-  private pulses: { x: number; y: number; born: number }[] = []
+  private echoWaves: { x: number; y: number; born: number }[] = []
   /** Tutorial highlight provider. */
   focus: () => Focus | null = () => null
   private unsubs: (() => void)[] = []
@@ -122,14 +120,13 @@ export class Renderer {
   ) {
     this.c = canvas.getContext('2d')!
     this.b = buf.getContext('2d', { alpha: false })!
-    this.shipCache.width = 660
+    this.shipCache.width = Math.ceil(BOUNDS.x + BOUNDS.w + 8)
     this.shipCache.height = 250
     const sc = this.shipCache.getContext('2d')!
     sc.imageSmoothingEnabled = false
     drawShipStatic(sc)
     this.fx.reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
     this.lastX = runner.game.player.x
-    runner.scanReady = () => this.officerAtPost(runner.game)
     this.unsubs.push(runner.onEvent((e) => this.event(e)))
     this.unsubs.push(runner.onFrame((now) => this.frame(now)))
   }
@@ -138,7 +135,7 @@ export class Renderer {
   }
 
   // ── Camera ─────────────────────────────────────────────────────────────
-  private layout() {
+  private layout(g: Game) {
     const W = this.canvas.clientWidth,
       H = this.canvas.clientHeight
     // The overlay only carries text and prompts; cap its resolution.
@@ -154,11 +151,24 @@ export class Renderer {
     const aw = Math.max(80, W - i.left - i.right),
       ah = Math.max(60, H - i.top - i.bottom)
     const B = aw / ah < 1.1 ? BOUNDS_TIGHT : BOUNDS
-    const target = Math.min(aw / B.w, ah / B.h)
-    this.s = target
-    const cx = i.left + aw / 2,
-      cy = i.top + ah / 2
-    this.camX = Math.floor(B.x + B.w / 2 - cx / this.s)
+    const tracking = mobile(g)
+    this.s = tracking ? Math.min(aw / 238, ah / 184, 3.25) : Math.min(aw / B.w, ah / B.h)
+    const cx = i.left + aw / 2
+    const cy = i.top + ah / 2
+    let center = B.x + B.w / 2
+    if (tracking) {
+      const half = aw / (2 * this.s)
+      const player = this.courierX(g)
+      const lead = this.fx.reduced || this.moving === 0 ? 0 : this.face * 20
+      const desired = player + lead
+      const dead = Math.min(32, half * 0.24)
+      const left = INNER_L - 39 + half
+      const right = INNER_R + 42 - half
+      const tracked = clamp(this.followX ?? player, desired - dead, desired + dead)
+      this.followX = right < left ? (left + right) / 2 : clamp(tracked, left, right)
+      center = this.followX
+    } else this.followX = null
+    this.camX = Math.floor(center - cx / this.s)
     this.camY = Math.floor(B.y + B.h / 2 - cy / this.s)
   }
   toArt(px: number, py: number) {
@@ -178,11 +188,6 @@ export class Renderer {
   private banner(text: string, color: string, sub?: string, dur = 2200) {
     this.banners = [{ text, sub, color, born: this.now, dur }]
   }
-  private itemArt(g: Game, id: CargoId) {
-    const p = position(g, id)
-    if (!p) return { x: this.officerArt().x, y: this.officerArt().y }
-    return { x: ax(p.x), y: floorY[p.floor] }
-  }
   private officerArt() {
     return { x: this.officer.x, y: floorY[this.officer.floor] }
   }
@@ -196,8 +201,9 @@ export class Renderer {
         if (!g.training) this.banner('UNDERWAY', '#ffd38a', 'Ash Belt highway · Cinder Gate in 90s')
         break
       case 'restart':
+        this.followX = null
         this.patched.clear()
-        this.pulses = []
+        this.echoWaves = []
         this.officer.visible = false
         this.banners = []
         this.fx.particles = []
@@ -213,29 +219,14 @@ export class Renderer {
       case 'stow': {
         sfx.stow()
         const x = slotX(e.slot),
-          y = floorY[e.slot === 'upper' ? 1 : 0]
-        const vault = e.slot === 'vault'
-        this.say(vault ? 'SHIELDED' : 'SECURED', x, y - 40, vault ? '#62e6ff' : '#7dffa8')
-        this.fx.burst(x, y - 16, 12, { speed: 50, max: 0.4, colors: vault ? ['#bff6ff', '#62e6ff'] : ['#d0ffe0', '#7dffa8'], glow: true })
-        break
-      }
-      case 'ejected': {
-        sfx.zap()
-        const p = this.itemArt(g, e.id)
-        this.fx.sparks(p.x, p.y - 20, 18)
-        this.say('LATCH BLOWN!', p.x, p.y - 44, '#ffb02a')
-        break
-      }
-      case 'vent': {
-        sfx.vent()
-        const p = this.itemArt(g, e.id)
-        this.fx.burst(p.x, p.y - 10, 50, { speed: 120, max: 0.8, gravity: 40, colors: ['#fff0c8', '#ffb02a', '#ff5a1a', '#ff2a1a'], glow: true })
-        this.say('VENTED!', p.x, p.y - 40, '#ff6a3a', true)
-        this.say(`−${rules.blastDamage} HULL  −${rules.conditionLoss}% CARGO`, p.x, p.y - 26, '#ffb08a')
+          y = floorY[slots[e.slot].floor]
+        const contained = e.slot === 'cradle'
+        this.say(contained ? 'CONTAINED' : 'SECURED', x, y - 40, contained ? '#62e6ff' : '#7dffa8')
+        this.fx.burst(x, y - 16, 12, { speed: 50, max: 0.4, colors: contained ? ['#bff6ff', '#62e6ff'] : ['#d0ffe0', '#7dffa8'], glow: true })
         break
       }
       case 'hullLoss': {
-        if (e.amount < rules.blastDamage) sfx.hit()
+        sfx.hit()
         const [x, y] = DAMAGE[Math.floor(Math.random() * DAMAGE.length)]
         this.fx.sparks(x, y, 8)
         break
@@ -248,13 +239,13 @@ export class Renderer {
         break
       case 'surge':
         sfx.surge()
-                for (const x of [CONSOLE_X, 176, 236, 300, 380, 460]) this.fx.sparks(x, ceilY(1) + 10, 14)
+        for (const x of [CONSOLE_X, 176, 236, 300, 380, 460]) this.fx.sparks(x, ceilY(1) + 10, 14)
         this.fx.sparks(CONSOLE_X, floorY[1] - 34, 24)
         this.banner('POWER SURGE', '#ff4a4a', 'Bus fault · hull is draining', 2600)
         break
       case 'repaired':
         sfx.repaired()
-                this.gaugeFlash = { color: '#7dffa8', until: this.now + 300 }
+        this.gaugeFlash = { color: '#7dffa8', until: this.now + 300 }
         this.fx.burst(CONSOLE_X, floorY[1] - 30, 30, { speed: 80, max: 0.6, colors: ['#d0ffe0', '#7dffa8', '#ffffff'], glow: true })
         this.say('POWER RESTORED', CONSOLE_X, floorY[1] - 52, '#7dffa8', true)
         break
@@ -295,13 +286,11 @@ export class Renderer {
         this.say('BREACH SEALED', ax(b.x), floorY[b.floor] - 58, '#62e6ff', true)
         break
       }
-      case 'pulse': {
-        sfx.pulse()
-        const p = this.itemArt(g, e.id)
-        this.pulses.push({ x: p.x, y: p.y - 12, born: this.now })
-        this.fx.burst(p.x, p.y - 12, 18, { speed: 90, max: 0.5, colors: ['#ff7ad8', '#9dff6a', '#ffffff'] })
-        this.say('SPECIMEN PULSE!', p.x, p.y - 44, '#ff7ad8', true)
-        this.say(`−${rules.pulseConditionLoss}% CARGO · LATCHES BLOWN`, p.x, p.y - 30, '#ffb0e8')
+      case 'echo': {
+        sfx.echo()
+        const p = rooms[e.room].post
+        this.echoWaves.push({ x: ax(p.x), y: floorY[p.floor] - 24, born: this.now })
+        this.banner('UNDECLARED RETURN', '#e9a0c4', 'Echo recorded in ' + rooms[e.room].name, 2800)
         break
       }
       case 'consoleOpen':
@@ -318,25 +307,23 @@ export class Renderer {
         break
       case 'boarded':
         sfx.stamp()
-        this.officer = { ...this.officer, x: AIRLOCK_X, floor: 0, face: -1, visible: true, leaving: false, climb: 0 }
-        this.banner('CUSTOMS BOARDING', '#ff7a5a', 'Five checkpoints. Every one costs something.', 2200)
+        this.officer = { ...this.officer, x: ax(rooms.airlock.post.x), floor: 1, face: -1, visible: true, leaving: false, climb: 0 }
+        this.banner('CUSTOMS BOARDING', '#ff7a5a', 'Cinder Gate freight declaration review', 2200)
+        break
+      case 'scanStarted':
+        sfx.scan(briefing(g).evidence.some((e) => e.kind === 'echo'))
         break
       case 'stopCleared': {
         const o = this.officerArt()
-        if (e.bribed) {
-          sfx.coin()
-          this.say(`BRIBED  −${rules.bribe}¢`, o.x, o.y - 50, '#ffd24a')
-        } else {
-          sfx.clear()
-          this.say('CLEAR', o.x, o.y - 50, '#7dffa8')
-        }
+        sfx.clear()
+        this.say('CHECK COMPLETE', o.x, o.y - 50, '#a4d7bc')
         break
       }
-      case 'surrender': {
+      case 'freightLost': {
         sfx.stamp()
         const o = this.officerArt()
         this.fx.burst(o.x - 20, o.y - 10, 20, { speed: 40, max: 0.6, colors: ['#ffffff', '#c0c0d0'] })
-        this.say(`${cargo[e.id].name.toUpperCase()} SEIZED`, o.x, o.y - 50, '#ff9a7a')
+        this.say(`${e.cause.toUpperCase()}`, o.x, o.y - 50, '#ff9a7a')
         break
       }
       case 'outcome':
@@ -365,8 +352,7 @@ export class Renderer {
     sfx.update(now, {
       alarm: g.fault && g.phase === 'highway',
       breach: !!g.breach && g.phase === 'highway',
-      agitation: g.phase === 'highway' ? g.items.specimen.agitation : 0,
-      heat: mobile(g) && g.phase === 'highway' ? g.items.cell.heat : 0,
+      exposure: g.phase === 'highway' && !caskSealed(g) && !g.echo ? g.exposedTicks / (rules.echoSeconds * rules.hz) * 100 : 0,
       engine: g.phase === 'highway' ? 1 : g.phase === 'prep' ? 0.6 : g.phase === 'contract' ? 0.25 : 0,
     })
     // The simulation runs at 30 Hz, so drawing faster only burns GPU time.
@@ -375,9 +361,9 @@ export class Renderer {
     this.lastRender = now
     this.now = now
     this.t += step
-    this.layout()
     this.fx.update(step)
     this.updateVisuals(g, step)
+    this.layout(g)
     this.world(g)
     this.overlay(g)
   }
@@ -407,7 +393,7 @@ export class Renderer {
       if (Math.floor(this.step) !== before) sfx.climb()
     }
     // Lighting
-    const target = g.outcome === 'death' ? 0 : g.fault ? 0.18 : 1
+    const target = g.outcome === 'death' ? 0 : g.fault && g.phase === 'highway' ? 0.4 : 1
     this.power = lerp(this.power, target, Math.min(1, dt * 5))
     // Travel speed
     const scene = this.scene(g)
@@ -432,13 +418,17 @@ export class Renderer {
   private updateOfficer(g: Game, dt: number) {
     const o = this.officer
     // Never leave a search without an officer to perform it.
-    if (g.phase === 'search' && !o.visible) Object.assign(o, { visible: true, leaving: false, x: AIRLOCK_X, floor: 0, climb: 0 })
+    if (g.phase === 'search' && !o.visible) Object.assign(o, { visible: true, leaving: false, x: ax(rooms.airlock.post.x), floor: 1, climb: 0 })
     if (!o.visible) return
     let goal: { x: number; floor: Floor; face: 1 | -1 }
-    if (o.leaving) goal = { x: AIRLOCK_X, floor: 0, face: 1 }
-    else if (g.phase === 'search') goal = stopSpot(searchStops[g.stop].id)
+    if (o.leaving) goal = { x: AIRLOCK_X, floor: 1, face: 1 }
+    else if (g.phase === 'search') goal = stopSpot(currentRoom(g))
     else return
     o.walking = false
+    if (!o.leaving && g.inspection?.stage !== 'approach') {
+      Object.assign(o, { x: goal.x, floor: goal.floor, face: goal.face, climb: 0 })
+      return
+    }
     if (o.climb > 0) {
       o.climb -= dt
       if (o.climb <= 0) o.floor = o.floor === 0 ? 1 : 0
@@ -447,7 +437,7 @@ export class Renderer {
     }
     const tx = o.floor !== goal.floor ? LADDER_X : goal.x
     const d = tx - o.x
-    const sp = 100 * dt
+    const sp = rules.officerSpeed * SX * dt
     if (Math.abs(d) > sp) {
       o.x += Math.sign(d) * sp
       o.face = d > 0 ? 1 : -1
@@ -455,7 +445,7 @@ export class Renderer {
       o.walking = true
     } else {
       o.x = tx
-      if (o.floor !== goal.floor) o.climb = 0.45
+      if (o.floor !== goal.floor) o.climb = rules.climbTicks / rules.hz
       else {
         o.face = goal.face
         if (o.leaving) o.visible = false
@@ -466,7 +456,8 @@ export class Renderer {
   private officerAtPost(g: Game) {
     const o = this.officer
     if (!o.visible || g.phase !== 'search' || o.climb > 0) return false
-    const goal = stopSpot(searchStops[g.stop].id)
+    if (g.inspection?.stage === 'approach') return false
+    const goal = stopSpot(currentRoom(g))
     return o.floor === goal.floor && Math.abs(o.x - goal.x) < 1
   }
 
@@ -477,9 +468,11 @@ export class Renderer {
     if (this.buf.width !== bw || this.buf.height !== bh) {
       this.buf.width = bw
       this.buf.height = bh
-      this.buf.style.width = bw * this.s + 'px'
-      this.buf.style.height = bh * this.s + 'px'
     }
+    const width = bw * this.s + 'px'
+    const height = bh * this.s + 'px'
+    if (this.buf.style.width !== width) this.buf.style.width = width
+    if (this.buf.style.height !== height) this.buf.style.height = height
     const c = this.b
     c.imageSmoothingEnabled = false
     c.setTransform(1, 0, 0, 1, 0, 0)
@@ -502,7 +495,7 @@ export class Renderer {
     const look: ShipLook = {
       t: this.t,
       power,
-      fault: g.fault,
+      fault: g.fault && g.phase === 'highway',
       thrust: scene === 'highway' ? 1 : scene === 'approach' ? lerp(1, 0.25, g.elapsed / (rules.prep * rules.hz)) : scene === 'dock' ? 0.2 : 0,
       hull: g.hull,
       airlockOpen: this.officer.visible ? 1 : 0,
@@ -510,9 +503,8 @@ export class Renderer {
     exhaust(c, look)
     c.drawImage(this.shipCache, 0, 0)
     // Slots (backs)
-    rackBack(c, slotX('aft'), 0)
-    rackBack(c, slotX('upper'), 1)
-    vaultBack(c, this.t)
+    for (const s of ['front', 'rear', 'berth'] as const) rackBack(c, slotX(s), 0)
+    cradleBack(c, this.t)
     this.lighting(c, g, power)
     machinery(c, look)
     consoleScreen(c, look, g.repairTicks !== null)
@@ -524,38 +516,30 @@ export class Renderer {
     this.searchMarks(c, g)
     this.items(c, g, 'slot')
     // Slot fronts
-    const occ = (s: 'aft' | 'upper' | 'vault') =>
-      cargoIds.some((id) => {
-        const l = g.items[id].location
-        return l.kind === 'slot' && l.slot === s
-      })
-    const cooling = (s: 'aft' | 'upper') => {
-      const l = g.items.cell.location
-      return l.kind === 'slot' && l.slot === s && g.items.cell.heat > 0 && g.phase === 'highway' ? 1 : 0
-    }
-    rackFront(c, slotX('aft'), 0, occ('aft'), this.t, cooling('aft'))
-    rackFront(c, slotX('upper'), 1, occ('upper'), this.t + 0.5, cooling('upper'))
-    vaultFront(c, this.t, occ('vault'), Math.max(0.3, power))
-    if (mobile(g) && heldItem(g) && !g.climb) {
-      if (!occ('aft')) slotHint(c, slotX('aft'), 0, 36, 36, '#7dffa8', this.t)
-      if (!occ('upper')) slotHint(c, slotX('upper'), 1, 36, 36, '#7dffa8', this.t)
-      if (!occ('vault')) slotHint(c, slotX('vault'), 0, 44, 52, '#62e6ff', this.t)
-    }
+    for (const s of ['front', 'rear', 'berth'] as const)
+      rackFront(c, slotX(s), 0, !!occupant(g, s), this.t, 0)
+    cradleFront(c, this.t, !!occupant(g, 'cradle'), Math.max(0.3, power))
+    const held = heldItem(g)
+    if (held && mobile(g) && g.phase !== 'search' && !g.climb)
+      for (const s of slotIds) {
+        if (!occupant(g, s) && accepts(s, held))
+          slotHint(c, slotX(s), 0, s === 'cradle' ? 44 : 36, s === 'cradle' ? 52 : 36, '#b8d9a8', this.t)
+      }
     this.items(c, g, 'loose')
     if (this.officer.visible) this.drawOfficer(c, g)
     this.drawCourier(c, g)
     this.items(c, g, 'held')
     this.damage(c, g)
     if (scene === 'wreck') debris(c, 0, 0, 0)
-    // Specimen pulse shockwaves (a few cheap expanding rings)
-    this.pulses = this.pulses.filter((p) => this.now - p.born < 600)
-    for (const p of this.pulses) {
+    // A brief visual echo follows the recording event.
+    this.echoWaves = this.echoWaves.filter((p) => this.now - p.born < 600)
+    for (const p of this.echoWaves) {
       const k = (this.now - p.born) / 600
-      c.strokeStyle = k < 0.5 ? '#ff7ad8' : '#9dff6a'
+      c.strokeStyle = '#eaa1c6'
       c.globalAlpha = 1 - k
       c.lineWidth = 2
       c.beginPath()
-      c.arc(p.x, p.y, 6 + k * 70, 0, Math.PI * 2)
+      c.arc(p.x, p.y, 6 + k * 34, 0, Math.PI * 2)
       c.stroke()
       c.globalAlpha = 1
     }
@@ -579,7 +563,7 @@ export class Renderer {
     // Emergency beacons during a fault
     if (g.fault && g.phase === 'highway') {
       const reduced = this.fx.reduced
-      for (const [i, x] of [200, 330, 462].entries()) {
+      for (const [i, x] of [200, 330, 462, 575].entries()) {
         for (const f of [0, 1] as Floor[]) {
           const y = ceilY(f) + 8
           const a = reduced ? 1 : Math.floor(this.t * 2 + i) % 2
@@ -597,37 +581,15 @@ export class Renderer {
 
   private searchMarks(c: Ctx, g: Game) {
     if (g.phase !== 'search') return
-    const stop = searchStops[g.stop].id
-    const scanning = this.runner.ui.scanning
-    const at = this.officerAtPost(g)
-    if (!at) return
-    const speed = scanning ? 3 : 0.8
-    const k = (this.t * speed) % 1
-    if (stop === 'lower' || stop === 'top') {
-      const f: Floor = stop === 'top' ? 1 : 0
-      const y = ceilY(f) + 10 + k * DECK_LINE(f)
-      c.save()
-      c.globalCompositeOperation = 'lighter'
-      r(c, `rgba(255,60,80,${scanning ? 0.9 : 0.5})`, INNER_L, Math.round(y), INNER_R - INNER_L, 1)
-      c.fillStyle = `rgba(255,40,60,${scanning ? 0.12 : 0.06})`
-      c.fillRect(INNER_L, ceilY(f) + 10, INNER_R - INNER_L, DECK_LINE(f))
-      c.restore()
-    } else {
-      const x = slotX(stop),
-        f: Floor = stop === 'upper' ? 1 : 0
-      const o = this.officer
-      c.save()
-      c.globalCompositeOperation = 'lighter'
-      c.fillStyle = `rgba(255,50,70,${scanning ? 0.3 : 0.16})`
-      c.beginPath()
-      c.moveTo(o.x - 16, floorY[f] - 21)
-      c.lineTo(x + 18, floorY[f] - 44)
-      c.lineTo(x + 18, floorY[f])
-      c.closePath()
-      c.fill()
-      r(c, `rgba(255,80,90,${scanning ? 1 : 0.6})`, x - 20, floorY[f] - 44 + Math.round(k * 44), 40, 1)
-      c.restore()
-    }
+    if (!this.officerAtPost(g)) return
+    const room = currentRoom(g)
+    const { floor } = rooms[room].post
+    const start = room === 'airlock' || room === 'containment' ? LADDER_X : INNER_L
+    const width = (start === LADDER_X ? INNER_R : LADDER_X) - start
+    const scanning = g.inspection?.stage === 'scan'
+    const y = ceilY(floor) + 11 + (this.t * (scanning ? 3 : 0.6) % 1) * (floorY[floor] - ceilY(floor) - 12)
+    r(c, scanning ? '#e7a286' : '#80585a', start, Math.round(y), width, 1)
+    if (scanning) r(c, 'rgba(240,144,110,0.16)', start, ceilY(floor) + 10, width, floorY[floor] - ceilY(floor) - 10)
   }
 
   private items(c: Ctx, g: Game, pass: 'slot' | 'loose' | 'held') {
@@ -636,7 +598,7 @@ export class Renderer {
     for (const id of cargoIds) {
       const item = g.items[id],
         loc = item.location
-      if (loc.kind === 'surrendered') continue
+      if (loc.kind === 'surrendered' || loc.kind === 'confiscated') continue
       if (loc.kind !== pass) continue
       if (g.phase === 'result' && g.outcome === 'death') continue
       let x: number, y: number
@@ -645,24 +607,12 @@ export class Renderer {
         y = cy - 29 + (g.climb ? 0 : this.moving > 0 && Math.floor(this.step) % 2 ? -1 : 0)
       } else if (loc.kind === 'slot') {
         x = slotX(loc.slot)
-        y = floorY[loc.slot === 'upper' ? 1 : 0] - (loc.slot === 'vault' ? 5 : 4)
+        y = floorY[slots[loc.slot].floor] - (loc.slot === 'cradle' ? 5 : 4)
       } else {
         x = ax(loc.x)
         y = floorY[loc.floor]
       }
-      const live = mobile(g)
-      if (id === 'cell') {
-        const hot = live && item.heat > 70 && loc.kind !== 'slot'
-        cell(c, x, y, { heat: g.phase === 'contract' ? 18 : item.heat, condition: item.condition, t: this.t, shake: hot })
-        if (live && g.phase === 'highway' && (item.heat > 1 || loc.kind !== 'slot')) heatGauge(c, x, y - 30, item.heat, this.t)
-      } else if (id === 'specimen') {
-        specimen(c, x, y, { agitation: item.agitation, condition: item.condition, t: this.t })
-        if (live && g.phase === 'highway' && item.agitation > 1) agitationGauge(c, x, y - 32, item.agitation, this.t)
-      } else {
-        const exposed = !shielded(item)
-        if (exposed && (live || g.phase === 'search')) signalRings(c, x, y, this.t, g.phase === 'highway' ? 0.5 : 1)
-        crate(c, x, y, { t: this.t, exposed, condition: item.condition })
-      }
+      cargoSprite(c, id, x, y, id === 'cask' && !caskSealed(g))
     }
   }
 
@@ -700,7 +650,7 @@ export class Renderer {
       step: this.step,
       t: this.t,
       carrying: !!heldItem(g),
-      panic: (g.fault && g.phase === 'highway') || g.items.cell.heat > 70 || g.phase === 'search',
+      panic: (g.fault && g.phase === 'highway') || g.phase === 'search',
     })
     if (g.outcome === 'arrest') {
       // Cuffs
@@ -752,8 +702,10 @@ export class Renderer {
     const s = this.s
     const ui = clamp(s / 2, 0.75, 1.35)
     if (mobile(g)) this.prompts(c, g, ui)
-    if (g.phase === 'prep') this.riskTags(c, g, ui, false)
-    if (g.phase === 'search' && this.officerAtPost(g) && s >= 1.2) this.riskTags(c, g, ui, true)
+    if (mobile(g)) this.roomLabels(c, g, ui)
+    if (g.phase === 'prep') this.cargoTags(c, g, ui)
+    const reply = responsePoint(g)
+    if (reply) this.diamond(c, this.sx(ax(reply.x)), this.sy(floorY[reply.floor] - 30), 10 * ui, '#9b664e', '◆')
     if (g.repairTicks !== null) this.gauge(c, g, ui)
     else this.gaugeRect.w = 0
     if (g.patch !== null && g.breach) this.patchPanel(c, g, ui)
@@ -861,27 +813,17 @@ export class Renderer {
         y = this.sy(floorY[1] - 50) - pulse * 6
       this.diamond(c, x, y, 13 * ui, '#ff3d4a', '!')
     }
-    // Overheating cell marker
-    const cp = position(g, 'cell')
-    if (cp && g.phase === 'highway' && g.items.cell.heat > 60 && g.items.cell.location.kind === 'loose') {
-      this.diamond(c, this.sx(ax(cp.x)), this.sy(floorY[cp.floor] - 46) - pulse * 5, 11 * ui, '#ff8a2a', '!')
-    }
-    // Breach marker (cold blue: vacuum, not electrical)
-    if (g.breach && g.phase === 'highway' && g.patch === null && acts[0]?.cmd.type !== 'patch') {
-      const b = breachSites[g.breach.site]
-      this.diamond(c, this.sx(ax(b.x)), this.sy(floorY[b.floor] - 52) - pulse * 6, 12 * ui, '#62e6ff', '!')
-    }
-    // Restless specimen marker
-    const sp = position(g, 'specimen')
-    if (sp && g.phase === 'highway' && g.items.specimen.agitation > 70 && g.items.specimen.location.kind !== 'held') {
-      this.diamond(c, this.sx(ax(sp.x)), this.sy(floorY[sp.floor] - 48) - pulse * 5, 11 * ui, '#ff7ad8', '!')
+    const cask = position(g, 'cask')
+    if (cask && g.phase === 'highway' && !caskSealed(g) && !g.echo) {
+      const grace = Math.ceil(rules.echoSeconds - g.exposedTicks / rules.hz)
+      this.diamond(c, this.sx(ax(cask.x)), this.sy(floorY[cask.floor] - 41), 10 * ui, '#824664', String(grace))
     }
     if (g.climb || g.repairTicks !== null || g.patch !== null) return
     // Nearest context action
     const held = heldItem(g)
     const a = acts[0]
     if (a) {
-      const top = a.cmd.type === 'repair' ? 46 : a.cmd.type === 'patch' ? 50 : a.cmd.type === 'stow' ? (a.cmd.slot === 'vault' ? 58 : 42) : 34
+      const top = a.cmd.type === 'repair' ? 46 : a.cmd.type === 'patch' ? 50 : a.cmd.type === 'stow' ? (a.cmd.slot === 'cradle' ? 58 : 42) : 34
       const x = this.sx(ax(a.at.x)),
         y = this.sy(floorY[a.at.floor] - top) - 14 * ui
       const col =
@@ -890,13 +832,13 @@ export class Renderer {
           : a.cmd.type === 'patch'
             ? '#62e6ff'
             : a.cmd.type === 'stow'
-            ? a.cmd.slot === 'vault'
+            ? a.cmd.slot === 'cradle'
               ? '#62e6ff'
               : '#7dffa8'
             : a.verb === 'Take'
               ? '#8a84a0'
               : '#ffd38a'
-      const label = a.cmd.type === 'stow' ? (a.cmd.slot === 'vault' ? 'Shield' : 'Stow') : a.verb
+      const label = a.cmd.type === 'stow' ? (a.cmd.slot === 'cradle' ? 'Seal' : 'Stow') : a.verb
       this.chip(c, 'E', label, x, y, ui, col)
     } else if (held && !this.touch) {
       const x = this.sx(this.courierX(g)),
@@ -947,20 +889,28 @@ export class Renderer {
     c.fill()
   }
 
-  private riskTags(c: Ctx, g: Game, ui: number, onlyStop: boolean) {
+  private roomLabels(c: Ctx, g: Game, ui: number) {
+    for (const id of roomIds) {
+      const { post, name } = rooms[id]
+      this.text(c, name.toUpperCase(), this.sx(ax(post.x)), this.sy(ceilY(post.floor) + 15), 11 * ui, '#d9c4a5')
+      if (g.echo === id)
+        this.text(c, '≋  ECHO', this.sx(ax(post.x)), this.sy(ceilY(post.floor) + 27), 12 * ui, '#f0a9cc')
+    }
+    if (g.phase !== 'search') {
+      for (const s of slotIds) {
+        const { floor, name } = slots[s]
+        this.text(c, name.toUpperCase(), this.sx(slotX(s)), this.sy(floorY[floor] - 28), 9 * ui, '#ded2ad')
+      }
+    }
+  }
+
+  private cargoTags(c: Ctx, g: Game, ui: number) {
     for (const id of cargoIds) {
-      const loc = g.items[id].location
-      if (loc.kind === 'surrendered') continue
-      if (onlyStop && !atStop(g, id)) continue
-      const risk = onlyStop ? detection(g, id) : exposure(g, id)
-      const p = position(g, id)!
-      const ax0 = loc.kind === 'held' ? this.courierX(g) : ax(p.x)
-      // Tags hang under the deck plating, clear of the action prompts above.
-      const ay = (loc.kind === 'held' ? this.courierY(g) : floorY[p.floor]) + 9
-      const pct = Math.round(risk * 100)
-      const col = pct === 0 ? '#7dffa8' : pct < 100 ? '#ffb02a' : '#ff3d4a'
-      const label = pct === 0 ? 'HIDDEN' : `${pct}% SEEN`
-      this.chip(c, null, label, this.sx(ax0), this.sy(ay) + 4 * ui, ui * 0.85, col, true)
+      const p = position(g, id)
+      if (!p) continue
+      const status = cargoStatus(g, id)
+      const okay = status === 'DECLARED' || status === 'SEALED'
+      this.chip(c, null, status, this.sx(ax(p.x)), this.sy(floorY[p.floor] + 10), ui * 0.69, okay ? '#add0ac' : '#efb381', true)
     }
   }
 
@@ -1138,23 +1088,23 @@ export class Renderer {
     const inBox = (bx: number, by: number, w: number, h: number) =>
       x >= bx - w / 2 - pad && x <= bx + w / 2 + pad && y >= by - h - pad && y <= by + pad
     const held = heldItem(g)
-    // Courier / carried cargo → drop
-    if (held && inBox(this.courierX(g), this.courierY(g), 22, 48)) return this.runner.drop()
-    // Cargo
-    for (const id of cargoIds) {
-      const loc = g.items[id].location
-      if (loc.kind === 'held' || loc.kind === 'surrendered') continue
-      const p = position(g, id)!
-      const bx = ax(p.x),
-        by = floorY[p.floor]
-      if (inBox(bx, by, 24, 28) && !held) return this.runner.goTo({ x: p.x, floor: p.floor, act: { type: 'pick', id } })
-    }
-    // Slots
-    for (const s of ['aft', 'upper', 'vault'] as const) {
-      const f: Floor = s === 'upper' ? 1 : 0
-      if (inBox(slotX(s), floorY[f], s === 'vault' ? 44 : 32, s === 'vault' ? 52 : 36)) {
-        const gx0 = gx(slotX(s))
-        return this.runner.goTo({ x: gx0, floor: f, act: held ? { type: 'stow', slot: s } : undefined })
+    if (g.phase === 'search') {
+      const p = responsePoint(g)
+      if (p && inBox(ax(p.x), floorY[p.floor], 28, 43)) return this.runner.walkToResponse()
+    } else {
+      if (held && inBox(this.courierX(g), this.courierY(g), 18, 44) &&
+          !(y > this.courierY(g) - 26 && slotIds.some((s) => accepts(s, held) && inBox(slotX(s), floorY[slots[s].floor], 32, 50))))
+        return this.runner.drop()
+      if (!held) {
+        const hit = cargoIds.map((id) => ({ id, p: position(g, id) }))
+          .filter(({ p }) => p && inBox(ax(p.x), floorY[p.floor], 25, 28))
+          .sort((a, b) => Math.abs(x - ax(a.p!.x)) - Math.abs(x - ax(b.p!.x)))[0]
+        if (hit?.p) return this.runner.goTo({ ...hit.p, act: { type: 'pick', id: hit.id } })
+      }
+      for (const s of slotIds) {
+        const p = slots[s]
+        if (inBox(slotX(s), floorY[p.floor], s === 'cradle' ? 44 : 33, s === 'cradle' ? 52 : 38))
+          return this.runner.goTo({ ...p, act: held && accepts(s, held) ? { type: 'stow', slot: s } : undefined })
       }
     }
     // Breach
@@ -1177,5 +1127,3 @@ export class Renderer {
     }
   }
 }
-
-const DECK_LINE = (f: Floor) => floorY[f] - ceilY(f) - 10

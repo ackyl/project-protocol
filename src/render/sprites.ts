@@ -1,4 +1,5 @@
-import { disc, glow, mix, pal, r, type Ctx } from './pixel'
+import type { CargoId } from '../game/content'
+import { disc, glow, pal, r, type Ctx } from './pixel'
 
 export type Pose = 'idle' | 'walk' | 'climb' | 'work' | 'frozen'
 
@@ -158,178 +159,48 @@ export function officer(c: Ctx, k: OfficerLook) {
 }
 
 // ── Cargo ────────────────────────────────────────────────────────────────
-export interface CellLook {
-  heat: number
-  condition: number
-  t: number
-  shake: boolean
-}
-
-/** Volatile Cell: glass canister with a hot core. Origin is the bottom center. */
-export function cell(c: Ctx, x: number, y: number, k: CellLook) {
-  const h = Math.min(1, k.heat / 100)
-  const jitter = k.shake ? Math.round(Math.sin(k.t * 70) * (h > 0.85 ? 1.5 : 1)) : 0
-  c.save()
-  c.translate(Math.round(x) + jitter, Math.round(y))
-  // Base with hazard band
-  r(c, pal.ink, -7, -4, 14, 4)
-  r(c, '#3b3546', -6, -3, 12, 2)
-  r(c, pal.hazard, -6, -3, 2, 2)
-  r(c, pal.hazard, -2, -3, 2, 2)
-  r(c, pal.hazard, 2, -3, 2, 2)
-  // Glass body
-  r(c, pal.ink, -6, -17, 12, 14)
-  const core = h < 0.5 ? mix('#ff9a2a', '#ff4a1a', h * 2) : mix('#ff4a1a', '#fff0c8', (h - 0.5) * 2)
-  const pulse = 0.5 + Math.sin(k.t * (3 + h * 18)) * 0.5
-  r(c, '#5a2a1a', -5, -16, 10, 12)
-  r(c, mix(core, '#ffffff', pulse * 0.25), -3, -15, 6, 10)
-  r(c, mix(core, '#fff6d0', 0.6), -1, -14, 2, 8)
-  r(c, 'rgba(255,255,255,0.55)', -4, -15, 1, 9)
-  // Cap and terminals
-  r(c, pal.ink, -7, -20, 14, 4)
-  r(c, '#6c6688', -6, -19, 12, 2)
-  r(c, '#a9a2c2', -6, -19, 12, 1)
-  r(c, pal.ink, -4, -22, 2, 2)
-  r(c, pal.ink, 2, -22, 2, 2)
-  r(c, '#e0c050', -4, -23, 2, 1)
-  r(c, '#e0c050', 2, -23, 2, 1)
-  // Cracks from venting
-  if (k.condition < 100) {
-    r(c, '#fff0d0', 2, -13, 1, 3)
-    r(c, '#fff0d0', 1, -10, 1, 2)
-  }
-  if (k.condition < 70) {
-    r(c, '#fff0d0', -4, -9, 1, 3)
-    r(c, '#fff0d0', -3, -7, 2, 1)
-  }
-  c.restore()
-  glow(c, x, y - 10, 14 + h * 22, h > 0.7 ? '#ff5a2a' : '#ff9a3a', 0.25 + h * 0.45 + pulse * 0.1)
-}
-
-export interface CrateLook {
-  t: number
-  exposed: boolean
-  condition: number
-}
-
-/** Signal Crate: teal ribbed case with a blinking antenna. */
-export function crate(c: Ctx, x: number, y: number, k: CrateLook) {
+export function cargoSprite(c: Ctx, id: CargoId, x: number, y: number, live = false) {
   c.save()
   c.translate(Math.round(x), Math.round(y))
-  r(c, pal.ink, -11, -15, 22, 15)
-  r(c, pal.teal1, -10, -14, 20, 13)
-  r(c, pal.teal2, -10, -14, 20, 2)
-  r(c, pal.teal0, -10, -3, 20, 2)
-  for (const xx of [-6, 0, 6]) r(c, pal.teal0, xx, -11, 1, 7)
-  // Corners
-  for (const [cx, cy] of [[-11, -15], [8, -15], [-11, -3], [8, -3]]) r(c, '#a9a2c2', cx, cy, 3, 3)
-  // Speaker grille
-  r(c, pal.ink, -4, -11, 8, 6)
-  for (let i = 0; i < 3; i++) r(c, k.exposed ? pal.teal3 : '#3a6a66', -3 + i * 3, -10, 1, 4)
-  // Antenna
-  r(c, pal.ink, 6, -22, 2, 8)
-  const blink = k.exposed && Math.floor(k.t * 3) % 2 === 0
-  r(c, blink ? '#ff4a5a' : '#6a2a3a', 5, -24, 4, 3)
+  switch (id) {
+    case 'drums':
+      for (const at of [-11, 0]) {
+        r(c, '#1c1510', at, -18, 12, 18)
+        r(c, '#936b42', at + 1, -17, 10, 16)
+        r(c, '#d4ae73', at + 2, -16, 3, 14)
+        for (const h of [-16, -5]) r(c, '#4f422d', at, h, 12, 2)
+        r(c, '#eee0ac', at + 3, -12, 6, 4)
+        r(c, '#5b3e29', at + 6, -11, 1, 2)
+      }
+      break
+    case 'bales':
+      r(c, '#262822', -12, -14, 24, 14)
+      r(c, '#909686', -11, -13, 22, 12)
+      r(c, '#c3c6ad', -10, -13, 20, 2)
+      r(c, '#6d7566', -11, -7, 22, 1)
+      for (const at of [-8, 5]) r(c, '#534e3f', at, -14, 3, 14)
+      r(c, '#ece0bd', -3, -6, 7, 3)
+      break
+    case 'relays':
+      r(c, '#101c1e', -12, -17, 24, 17)
+      r(c, '#426a65', -11, -16, 22, 15)
+      r(c, '#77958b', -10, -15, 20, 2)
+      for (const at of [-8, -3, 2, 7]) r(c, '#253839', at, -12, 2, 7)
+      r(c, '#d29f66', -9, -4, 4, 2)
+      r(c, '#ab7d6b', 4, -4, 5, 2)
+      break
+    case 'cask':
+      r(c, '#1b1720', -10, -27, 20, 27)
+      r(c, '#44464d', -8, -25, 16, 24)
+      r(c, '#777980', -7, -25, 4, 24)
+      r(c, '#26252d', -6, -20, 13, 13)
+      r(c, live ? '#ff9aca' : '#8c5373', -5, -15, 11, 1)
+      r(c, live ? '#ffb3db' : '#ac688a', -1, -17, 3, 5)
+      for (const h of [-25, -5]) r(c, '#9c9285', -9, h, 18, 2)
+      r(c, '#e4c99c', 3, -9, 4, 5)
+      break
+  }
   c.restore()
-  if (blink) glow(c, x + 7, y - 23, 8, '#ff4a5a', 0.5)
-}
-
-/** Expanding broadcast rings from an exposed crate. */
-export function signalRings(c: Ctx, x: number, y: number, t: number, strength: number) {
-  for (let i = 0; i < 3; i++) {
-    const k = (t * 0.7 + i / 3) % 1
-    const rad = 6 + k * 26
-    c.save()
-    c.globalAlpha = (1 - k) * 0.55 * strength
-    c.strokeStyle = '#7ff0dc'
-    c.lineWidth = 1
-    c.beginPath()
-    c.arc(Math.round(x + 7) + 0.5, Math.round(y - 23) + 0.5, rad, -Math.PI * 0.85, -Math.PI * 0.15)
-    c.stroke()
-    c.restore()
-  }
-}
-
-/** Small pixel heat gauge drawn above the cell. */
-export function heatGauge(c: Ctx, x: number, y: number, heat: number, t: number) {
-  const w = 16,
-    h = Math.min(1, heat / 100)
-  const danger = h > 0.7
-  const bx = Math.round(x - w / 2),
-    by = Math.round(y)
-  r(c, pal.ink, bx - 1, by - 1, w + 2, 4)
-  r(c, '#2a1a1a', bx, by, w, 2)
-  const col = h < 0.5 ? '#ffb02a' : h < 0.7 ? '#ff7a2a' : Math.floor(t * 8) % 2 ? '#ff2a3a' : '#ffe0a0'
-  r(c, col, bx, by, Math.max(1, Math.round(w * h)), 2)
-  if (danger && Math.floor(t * 4) % 2 === 0) {
-    r(c, pal.ink, bx + w + 2, by - 4, 4, 8)
-    r(c, '#ffd24a', bx + w + 3, by - 3, 2, 4)
-    r(c, '#ffd24a', bx + w + 3, by + 2, 2, 1)
-  }
-}
-
-export interface SpecimenLook {
-  agitation: number
-  condition: number
-  t: number
-}
-
-/** Bio Specimen: a bell jar with a one-eyed creature that gets restless. */
-export function specimen(c: Ctx, x: number, y: number, k: SpecimenLook) {
-  const a = Math.min(1, k.agitation / 100)
-  const thrash = a > 0.6 ? Math.round(Math.sin(k.t * (10 + a * 30)) * (a > 0.85 ? 2 : 1)) : 0
-  c.save()
-  c.translate(Math.round(x), Math.round(y))
-  // Base plate with hazard dots
-  r(c, pal.ink, -8, -4, 16, 4)
-  r(c, '#3a3a4e', -7, -3, 14, 2)
-  r(c, '#9dff6a', -5, -3, 2, 1)
-  r(c, '#9dff6a', 3, -3, 2, 1)
-  // Jar
-  r(c, pal.ink, -7, -20, 14, 16)
-  const fluid = mix('#2f7a3a', '#a0308a', a)
-  r(c, fluid, -6, -19, 12, 15)
-  r(c, mix('#5fd06a', '#ff5ad0', a), -6, -19, 12, 2)
-  // Creature
-  const cx = thrash
-  r(c, mix('#c9ff9a', '#ffb0f0', a), -3 + cx, -14, 6, 6)
-  r(c, '#ffffff', -1 + cx, -13, 3, 3)
-  r(c, pal.ink, (a > 0.6 ? 0 : 1) + cx, -12, 1, 1)
-  const wig = Math.floor(k.t * (3 + a * 10)) % 2
-  r(c, mix('#c9ff9a', '#ffb0f0', a), -5 + cx, -9 + wig, 2, 3)
-  r(c, mix('#c9ff9a', '#ffb0f0', a), 3 + cx, -9 + (1 - wig), 2, 3)
-  // Bubbles
-  for (let i = 0; i < 2 + Math.round(a * 3); i++) {
-    const by = -6 - ((k.t * (4 + a * 10) + i * 3.3) % 12)
-    r(c, 'rgba(220,255,220,0.7)', -5 + ((i * 4) % 10), Math.round(by), 1, 1)
-  }
-  // Glass glint and lid
-  r(c, 'rgba(255,255,255,0.5)', -5, -18, 1, 10)
-  r(c, pal.ink, -8, -23, 16, 4)
-  r(c, '#7a7a94', -7, -22, 14, 2)
-  r(c, '#a9a2c2', -7, -22, 14, 1)
-  r(c, pal.ink, -1, -26, 2, 3)
-  // Cracks from pulses
-  if (k.condition < 100) r(c, '#e8ffe0', 3, -17, 1, 4)
-  if (k.condition < 80) r(c, '#e8ffe0', -4, -10, 1, 3)
-  c.restore()
-}
-
-/** Agitation gauge: green to magenta, with a warning blip near the limit. */
-export function agitationGauge(c: Ctx, x: number, y: number, level: number, t: number) {
-  const w = 16,
-    h = Math.min(1, level / 100)
-  const bx = Math.round(x - w / 2),
-    by = Math.round(y)
-  r(c, pal.ink, bx - 1, by - 1, w + 2, 4)
-  r(c, '#1a2a1a', bx, by, w, 2)
-  const col = h < 0.6 ? '#7dff6a' : h < 0.85 ? '#ff7ad8' : Math.floor(t * 8) % 2 ? '#ff3ac0' : '#ffe0f6'
-  r(c, col, bx, by, Math.max(1, Math.round(w * h)), 2)
-  if (h > 0.75 && Math.floor(t * 4) % 2 === 0) {
-    r(c, pal.ink, bx + w + 2, by - 4, 4, 8)
-    r(c, '#ff7ad8', bx + w + 3, by - 3, 2, 4)
-    r(c, '#ff7ad8', bx + w + 3, by + 2, 2, 1)
-  }
 }
 
 /** An open hull breach on the back wall: torn plating with space showing through. */

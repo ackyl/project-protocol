@@ -114,7 +114,7 @@ export function App() {
             muted={muted}
             onMute={() => setMuted(sfx.toggleMute())}
             touch={touch}
-            training={tut.active ? { objective: tut.objective, step: tut.index + 1, total: steps.length, cleared: tut.cleared } : null}
+            training={tut.active ? { objective: tut.objective, step: tut.index + 1, total: steps.length } : null}
           />
         )}
         {g.phase === 'contract' && (

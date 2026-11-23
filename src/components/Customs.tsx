@@ -1,69 +1,83 @@
 import { useRef } from 'react'
-import { cargo, cargoIds, rules, searchStops } from '../game/content'
-import { atStop, detection, itemPayout } from '../game/customs'
+import { cargo, rooms, rules } from '../game/content'
+import { briefing, currentRoom, responsePoint, surrenderable } from '../game/customs'
+import { near } from '../game/simulation'
 import type { Runner, UiState } from '../app/runner'
-import { cargoIcon, officerPortrait } from '../render/icons'
+import { officerPortrait } from '../render/icons'
 import { useReserve } from './reserve'
 
-const lines: Record<string, [string, string]> = {
-  lower: ['Lower deck. Stand still.', 'Something down here is humming.'],
-  top: ['Upstairs. Nice and tidy.', 'Upstairs next. Hands where I can see them.'],
-  aft: ['Aft cradle. Empty, apparently.', 'What is in the aft cradle, courier?'],
-  upper: ['Upper rack. Nothing? Shame.', "Rack's latched. Let me have a look."],
-  vault: ['Shield bay, empty. Pity.', 'A shield bay, huh. Expensive habit.'],
-}
+const methods = { surface: 'Surface check', rack: 'Open paired rack', cradle: 'Open powered cradle', room: 'Open all local fixtures' }
 
 export function Customs({ ui, runner, touch }: { ui: UiState; runner: Runner; touch: boolean }) {
   const g = ui.game
   const box = useRef<HTMLElement>(null)
   const side = window.innerWidth > window.innerHeight * 1.6 && window.innerHeight < 520
   useReserve(box, 'customs', side ? 'right' : 'bottom')
-  const stop = searchStops[g.stop]
-  const here = cargoIds.filter((id) => atStop(g, id))
-  const busy = ui.scanning
-  const say = lines[stop.id][here.length ? 1 : 0]
+  const i = g.inspection!
+  const room = currentRoom(g)
+  const check = briefing(g)
+  const heat = check.evidence.some((e) => e.kind === 'heat')
+  const p = responsePoint(g)
+  const ready = p && !g.climb && near(g, p)
+  const hold = i.stage === 'hold'
+  const review = i.stage === 'review'
+  const waiting = i.stage === 'approach'
   return (
     <section className={'customs ' + (side ? 'side' : 'bottom')} ref={box} aria-labelledby="stop-name">
       <div className="portrait">
         <img src={officerPortrait()} alt="Customs officer" width={130} height={110} />
-        <span>GATE OFFICER</span>
+        <span>CINDER GATE</span>
       </div>
       <div className="customs-body">
         <div className="customs-head">
-          <h2 id="stop-name">{stop.name}</h2>
-          <span>
-            CHECK {g.stop + 1}/{searchStops.length}
+          <h2 id="stop-name">{rooms[room].name}</h2>
+          <span className={check.suspicion >= rules.deepSearch ? 'escalated' : ''}>
+            SUSPICION {waiting ? Math.min(i.carried, rules.suspicionLimit) : check.suspicion}/{rules.suspicionLimit}
           </span>
         </div>
-        <p className="speech">“{say}”</p>
-        <ul className="exposed">
-          {here.length === 0 && <li className="none">Nothing of yours here.</li>}
-          {here.map((id) => {
-            const pct = Math.round(detection(g, id) * 100)
-            return (
-              <li key={id} className={pct === 0 ? 'safe' : pct < 100 ? 'risky' : 'caught'}>
-                <img src={cargoIcon(id)} alt="" width={28} height={30} />
-                {cargo[id].name}
-                <b>{pct === 0 ? 'hidden' : pct + '% found'}</b>
-              </li>
-            )
-          })}
-        </ul>
-        <div className="choices">
-          <button className="go" disabled={busy} onClick={() => runner.send({ type: 'inspect' })} autoFocus>
-            {busy ? 'Scanning…' : 'Let them search'} {!touch && !busy && <kbd>E</kbd>}
-          </button>
-          <button className="alt" disabled={busy || g.cash < rules.bribe} onClick={() => runner.send({ type: 'bribe' })}>
-            Bribe {rules.bribe}¢ {!touch && <kbd>B</kbd>}
-            <small>{g.cash < rules.bribe ? `only ${g.cash}¢ left` : 'skip this check'}</small>
-          </button>
-          {here.map((id, i) => (
-            <button className="alt bad" key={id} disabled={busy} onClick={() => runner.send({ type: 'surrender', id })}>
-              Hand over {cargo[id].name.split(' ')[1]} {!touch && <kbd>{i + 1}</kbd>}
-              <small>forfeit {itemPayout(g, id)}¢</small>
+        {waiting ? <p className="speech">Officer en route. You may follow.</p> : (
+          <>
+            <p className="speech">
+              {ui.scanning ? 'Scanning' : methods[check.depth]}
+              {!ui.scanning && check.found.length > 0 && <> · {check.found.some((id) => id === 'cask') ? 'impound risk' : 'freight exposed'}</>}
+            </p>
+            {check.evidence.length > 0 && (
+              <ul className="case-evidence">
+                {check.evidence.map((e) => <li key={e.text}>{e.text} <b>+{e.points}</b></li>)}
+              </ul>
+            )}
+          </>
+        )}
+        {ui.scanning && <p className="case-note">{g.note}</p>}
+        {hold && (
+          <div className="choices">
+            <button className="alt" onClick={ready ? () => runner.send({ type: 'respond' }) : runner.walkToResponse}>
+              {ready ? 'File response' : i.response?.kind === 'cite' ? 'Walk to docket' : 'Walk to freight'}
+              {!touch && <kbd>{ready ? 'E' : 'F'}</kbd>}
             </button>
-          ))}
-        </div>
+            <span className="hold-clock">HOLD · {Math.ceil(i.remaining / rules.hz)}s</span>
+            <button className="link light" onClick={() => runner.send({ type: 'inspect' })}>End hold</button>
+          </div>
+        )}
+        {review && (
+          <div className="choices">
+            <button className="go" onClick={() => runner.send({ type: 'inspect' })}>
+              Allow search {!touch && <kbd>E</kbd>}
+            </button>
+            {heat && (
+              <button className="alt" onClick={() => runner.send({ type: 'hold', response: { kind: 'cite' } })}>
+                Cite heated lubricant
+                <small>Requires drums in front rack</small>
+              </button>
+            )}
+            {surrenderable(g).map((id) => (
+              <button className="alt bad" key={id} onClick={() => runner.send({ type: 'hold', response: { kind: 'surrender', id } })}>
+                Surrender {id === 'relays' ? 'relays' : 'cask'}
+                <small>{cargo[id].name} · lose {cargo[id].value}¢</small>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </section>
   )

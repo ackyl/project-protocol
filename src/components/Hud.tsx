@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { breachSites, cargo, cargoIds, rules, searchStops, type CargoId } from '../game/content'
-import { exposure, ledger } from '../game/customs'
+import { breachSites, cargo, cargoIds, roomAt, roomIds, rooms, rules, ship } from '../game/content'
+import { cargoStatus, currentRoom, ledger } from '../game/customs'
 import { cargoIcon } from '../render/icons'
-import { heldItem, shielded, type Game } from '../game/simulation'
+import { caskSealed, heldItem, mobile, position, type Game } from '../game/simulation'
 import type { UiState } from '../app/runner'
 import { useReserve } from './reserve'
 
@@ -10,31 +10,24 @@ const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2,
 
 function objective(g: Game): { text: string; urgent?: boolean } | null {
   const held = heldItem(g)
-  const loc = (id: CargoId) => g.items[id].location.kind
   const site = g.breach ? breachSites[g.breach.site].name : ''
   if (g.phase === 'highway') {
-    if (g.fault && g.breach) return { text: `Two emergencies! Console (upper deck, aft) and the ${site} breach`, urgent: true }
-    if ((g.fault || g.breach) && held) return { text: 'Emergency! Put the cargo down — stations need empty hands', urgent: true }
-    if (g.fault) return { text: 'Power fault! Fix the console — upper deck, aft', urgent: true }
-    if (g.breach) return { text: `Hull breach at the ${site}! Patch it`, urgent: true }
-    if (g.items.specimen.agitation > 70 && loc('specimen') !== 'slot')
-      return { text: 'The specimen is about to pulse — contain it!', urgent: true }
-    if (held === 'cell') return { text: 'Rack the cell before it vents' }
-    if (loc('cell') === 'loose') return { text: 'The cell is cooking — grab it and rack it', urgent: g.items.cell.heat > 60 }
-    if (held === 'specimen') return { text: 'Contain the specimen in a free cradle' }
-    if (loc('specimen') === 'loose') return { text: 'The specimen is getting restless — contain it' }
-    if (held === 'crate') return { text: 'Shield bay — lower deck, bow end' }
-    if (!shielded(g.items.crate)) return { text: 'The crate broadcasts — only the shield bay hides it' }
-    return { text: 'Cargo secured. Stay sharp.' }
+    if (!caskSealed(g) && !g.echo) {
+      const grace = Math.ceil(rules.echoSeconds - g.exposedTicks / rules.hz)
+      return { text: `Containment offline · ${grace}s to echo`, urgent: true }
+    }
+    if (g.fault && g.breach) return { text: `Power fault and ${site} breach`, urgent: true }
+    if ((g.fault || g.breach) && held) return { text: 'Drop your load to use the repair station', urgent: true }
+    if (g.fault) return { text: 'Power fault · reach Engineering', urgent: true }
+    if (g.breach) return { text: `Patch the ${site} breach`, urgent: true }
   }
-  if (g.phase === 'prep') {
-    if (held) return { text: 'Put it somewhere — hand-held cargo is found for sure', urgent: true }
-    const loose = cargoIds.find((id) => loc(id) === 'loose')
-    if (loose) return { text: `Loose cargo is always found — stow the ${cargo[loose].name}`, urgent: true }
-    const risky = cargoIds.filter((id) => exposure(g, id) > 0)
-    if (risky.length)
-      return { text: `${risky.map((id) => cargo[id].name).join(' & ')} can still be found — bribe or gamble` }
-    return { text: 'Looks clean. Wait for the knock.' }
+  if (g.phase === 'prep' || g.phase === 'highway') {
+    if (cargoStatus(g, 'relays') === 'EXPOSED' || cargoStatus(g, 'relays') === 'UNEXPLAINED HEAT')
+      return { text: 'Relays in rear rack · heated drums in front' }
+    if (cargoStatus(g, 'bales') === 'OFF MANIFEST') return { text: 'Stow gasket bales in the open berth' }
+    if (!caskSealed(g)) return { text: 'Return the cask to its powered cradle', urgent: true }
+    if (g.echo) return { text: `Echo on record in ${rooms[g.echo].name}` }
+    return { text: g.phase === 'prep' ? 'Manifest matches · keep freight stowed' : 'Freight secured' }
   }
   return null
 }
@@ -45,15 +38,14 @@ function CargoStrip({ g }: { g: Game }) {
       {cargoIds.map((id) => {
         const item = g.items[id]
         const loc = item.location.kind
-        if (loc === 'surrendered') return null
-        const level = id === 'cell' ? item.heat : id === 'specimen' ? item.agitation : 0
-        const tone = level > 70 ? 'bad' : loc === 'slot' ? (id === 'crate' && !shielded(item) ? 'warn' : 'ok') : 'warn'
-        const status =
-          loc === 'slot' ? (id === 'crate' && !shielded(item) ? 'racked · loud' : 'secured') : loc === 'held' ? 'carried' : 'loose'
+        if (loc === 'surrendered' || loc === 'confiscated') return null
+        const level = id === 'cask' ? g.exposedTicks / (rules.hz * rules.echoSeconds) : 0
+        const status = cargoStatus(g, id)
+        const tone = status === 'LIVE REPLY' || status === 'EXPOSED' ? 'bad' : loc !== 'slot' || g.echo && id === 'cask' ? 'warn' : 'ok'
         return (
           <span key={id} className={'cargo-chip ' + tone} title={`${cargo[id].name}: ${status}`}>
             <img src={cargoIcon(id)} alt="" width={18} height={19} />
-            {id !== 'crate' && <i style={{ transform: `scaleX(${Math.min(1, level / 100)})` }} />}
+            {id === 'cask' && <i style={{ transform: `scaleX(${Math.min(1, level)})` }} />}
           </span>
         )
       })}
@@ -72,7 +64,7 @@ export function Hud({
   muted: boolean
   onMute: () => void
   touch: boolean
-  training: { objective: string | null; step: number; total: number; cleared: number } | null
+  training: { objective: string | null; step: number; total: number } | null
 }) {
   const g = ui.game
   const top = useRef<HTMLDivElement>(null)
@@ -148,9 +140,9 @@ export function Hud({
           {g.phase === 'search' && (
             <>
               <div className="route customs-tag">CUSTOMS SEARCH</div>
-              <div className="pips" aria-label={`Checkpoint ${g.stop + 1} of ${searchStops.length}`}>
-                {searchStops.map((s, i) => (
-                  <i key={s.id} className={i < g.stop ? 'done' : i === g.stop ? 'now' : ''} title={s.name} />
+              <div className="pips" aria-label="Inspection route">
+                {g.inspection?.route.map((room, i) => (
+                  <i key={room} className={i < g.inspection!.index ? 'done' : i === g.inspection!.index ? 'now' : ''} title={rooms[room].name} />
                 ))}
               </div>
             </>
@@ -169,7 +161,6 @@ export function Hud({
               {obj.text}
             </div>
           )}
-          {training && training.cleared > 0 && <div className="cleared" key={'c' + training.cleared}>✓ Done</div>}
         </div>
 
         <div className="hud-right">
@@ -182,6 +173,7 @@ export function Hud({
             {muted ? <SpeakerOff /> : <SpeakerOn />}
           </button>
         </div>
+        {mobile(g) && <RoomStrip g={g} />}
       </div>
 
       {live && !touch && (
@@ -194,6 +186,30 @@ export function Hud({
         </div>
       )}
     </>
+  )
+}
+
+function RoomStrip({ g }: { g: Game }) {
+  const here = roomAt(g.player)
+  const officer = g.phase === 'search' ? currentRoom(g) : null
+  const caseRoom = position(g, 'cask')
+  const threats = new Set([
+    g.phase === 'highway' && g.fault ? roomAt(ship.station) : null,
+    g.phase === 'highway' && g.breach ? roomAt(breachSites[g.breach.site]) : null,
+    g.phase === 'highway' && !caskSealed(g) && caseRoom ? roomAt(caseRoom) : null,
+  ])
+  return (
+    <div className="room-strip" aria-label="Ship compartments">
+      {roomIds.map((id) => (
+        <span className={here === id ? 'here' : ''} key={id}
+          title={rooms[id].name + (here === id ? ' · you' : '') + (officer === id ? ' · officer destination' : '') + (g.echo === id ? ' · residual echo' : '') + (threats.has(id) ? ' · emergency' : '')}>
+          {here === id && <b aria-label="You">● </b>}{rooms[id].short}
+          {officer === id && <b aria-label="Officer destination"> ◆</b>}
+          {threats.has(id) && <b className="threat" aria-label="Emergency"> !</b>}
+          {g.echo === id && <b className="trace" aria-label="Residual echo"> ≋</b>}
+        </span>
+      ))}
+    </div>
   )
 }
 

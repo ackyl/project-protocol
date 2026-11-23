@@ -4,12 +4,6 @@ import type { Runner } from '../app/runner'
 import { cargoIcon } from '../render/icons'
 import { useReserve } from './reserve'
 
-const hazard = {
-  cell: 'Heats up when loose or carried. Vents at 100% — hull and cargo damage.',
-  crate: 'Broadcasts a signal. Only the shield bay hides it from customs.',
-  specimen: 'Restless outside a cradle. Pulses blow latches and spoil it.',
-}
-
 export function Title({
   runner,
   touch,
@@ -40,7 +34,7 @@ export function Title({
           <span>PROJECT</span>
           <b>PROTOCOL</b>
         </h1>
-        <p>Disposable courier · dangerous freight · day 01</p>
+        <p>Freight transit · Cinder Gate</p>
         <button className="mute title-mute" onClick={onMute} aria-label={muted ? 'Unmute sound' : 'Mute sound'}>
           {muted ? 'SOUND OFF' : 'SOUND ON'}
         </button>
@@ -67,7 +61,7 @@ export function Title({
               <img src={cargoIcon(id)} alt="" width={56} height={60} />
               <div>
                 <b>{cargo[id].name}</b>
-                <small>{hazard[id]}</small>
+                <small>{cargo[id].declaration ? 'DECLARED' : cargo[id].category === 'gray' ? 'UNLICENSED' : 'OFF MANIFEST'} · {cargo[id].detail}</small>
               </div>
               <em>{cargo[id].value}¢</em>
             </li>

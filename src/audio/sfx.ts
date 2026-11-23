@@ -6,7 +6,6 @@ class Sfx {
   private master: GainNode | null = null
   private hum: { osc: OscillatorNode; gain: GainNode } | null = null
   private alarmNext = 0
-  private beepNext = 0
   private hissNext = 0
   private chirpNext = 0
   muted = false
@@ -109,13 +108,6 @@ class Sfx {
     this.tone(80, 0.6, 'sawtooth', 0.25, 30)
     this.tone(1800, 0.2, 'square', 0.05, 200, 0.05)
   }
-  zap() {
-    this.noise(0.07, 0.12, 3000, 4)
-  }
-  vent() {
-    this.noise(1.0, 0.7, 180, 0.3)
-    this.tone(60, 0.8, 'sine', 0.4, 25)
-  }
   hit() {
     this.noise(0.12, 0.15, 500, 1)
   }
@@ -129,16 +121,13 @@ class Sfx {
     this.tone(880, 0.05, 'square', 0.05)
     this.tone(1320, 0.05, 'square', 0.05, undefined, 0.05)
   }
-  scan() {
-    this.tone(300, 0.85, 'sawtooth', 0.05, 1200)
+  scan(echo: boolean) {
+    if (echo) this.tone(480, 0.22, 'sine', 0.095, 290)
+    this.tone(300, 0.64, 'sawtooth', 0.05, 1200, echo ? 0.22 : 0)
   }
   clear() {
     this.tone(880, 0.1, 'triangle', 0.1)
     this.tone(1175, 0.18, 'triangle', 0.1, undefined, 0.09)
-  }
-  coin() {
-    this.tone(1046, 0.06, 'square', 0.07)
-    this.tone(1568, 0.16, 'square', 0.07, undefined, 0.06)
   }
   busted() {
     for (let i = 0; i < 4; i++) {
@@ -162,7 +151,7 @@ class Sfx {
     this.noise(0.04, 0.3, 3500, 3)
     this.tone(520 + n * 110, 0.08, 'square', 0.07)
   }
-  pulse() {
+  echo() {
     this.tone(900, 0.5, 'sine', 0.15, 120)
     this.tone(300, 0.5, 'sawtooth', 0.06, 1200)
     this.noise(0.3, 0.2, 700, 2)
@@ -172,7 +161,7 @@ class Sfx {
   }
 
   /** Continuous cues, called once per frame. */
-  update(now: number, s: { alarm: boolean; breach: boolean; agitation: number; heat: number; engine: number }) {
+  update(now: number, s: { alarm: boolean; breach: boolean; exposure: number; engine: number }) {
     const c = this.ctx
     if (!c || !this.master) return
     if (!this.hum) {
@@ -198,16 +187,12 @@ class Sfx {
       this.hissNext = now + 1100
       this.noise(1.0, 0.06, 5200, 0.6)
     }
-    if (s.agitation > 60 && now >= this.chirpNext) {
-      const k = (s.agitation - 60) / 40
+    if (s.exposure > 60 && now >= this.chirpNext) {
+      const k = (s.exposure - 60) / 40
       this.chirpNext = now + 900 - k * 650
       this.tone(380 + k * 300, 0.07, 'triangle', 0.05, 260)
     }
-    if (s.heat > 55 && now >= this.beepNext) {
-      const k = (s.heat - 55) / 45
-      this.beepNext = now + 700 - k * 560
-      this.tone(1400 + k * 600, 0.04, 'square', 0.035)
-    }
+
   }
 }
 

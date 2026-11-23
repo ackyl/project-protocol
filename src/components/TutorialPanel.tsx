@@ -16,46 +16,13 @@ function Illustration({ art }: { art: Art }) {
           </span>
         </div>
       )
-    case 'cell':
+    case 'cargo':
+    case 'cover':
       return (
         <div className="ill">
-          <figure className="cargo-ill">
-            <img src={cargoIcon('cell')} alt="" />
-            <span className="meter heat">
-              <i />
-            </span>
-          </figure>
+          <figure className="cargo-ill"><img src={cargoIcon(art === 'cargo' ? 'relays' : 'drums')} alt="" /></figure>
           <span className="to">→</span>
-          <span className="cradle-ill">
-            <img src={cargoIcon('cell')} alt="" />
-          </span>
-          <span className="tag ok">COOLING</span>
-        </div>
-      )
-    case 'crate':
-      return (
-        <div className="ill">
-          <figure className="cargo-ill rings">
-            <img src={cargoIcon('crate')} alt="" />
-          </figure>
-          <span className="to">→</span>
-          <span className="vault-ill">
-            <img src={cargoIcon('crate')} alt="" />
-          </span>
-          <span className="tag ok">HIDDEN</span>
-        </div>
-      )
-    case 'specimen':
-      return (
-        <div className="ill">
-          <figure className="cargo-ill shake">
-            <img src={cargoIcon('specimen')} alt="" />
-            <span className="meter bio">
-              <i />
-            </span>
-          </figure>
-          <span className="burst">PULSE</span>
-          <span className="tag bad">−{rules.pulseConditionLoss}% · LATCHES BLOWN</span>
+          <span className="tag ok">{art === 'cargo' ? 'REAR RACK' : 'FRONT RACK'}</span>
         </div>
       )
     case 'surge':
@@ -84,27 +51,26 @@ function Illustration({ art }: { art: Art }) {
     case 'prep':
       return (
         <div className="ill">
-          <span className="tag ok">HIDDEN</span>
-          <span className="tag warn">{rules.bioRackChance * 100}% SEEN</span>
-          <span className="tag warn">{rules.signalRackChance * 100}% SEEN</span>
-          <span className="tag bad">100% SEEN</span>
+          <span className="tag ok">DECLARED</span>
+          <span className="tag warn">COVERED / HEAT</span>
+          <span className="tag bad">LIVE REPLY</span>
         </div>
       )
     case 'search':
       return (
         <div className="ill">
           <span className="btn-ill main">SEARCH</span>
-          <span className="btn-ill">BRIBE {rules.bribe}¢</span>
-          <span className="btn-ill bad">HAND OVER</span>
+          <span className="btn-ill">CITE MANIFEST</span>
+          <span className="btn-ill bad">SURRENDER</span>
         </div>
       )
     case 'payday':
       return (
         <div className="ill">
           <div className="receipt-ill">
-            <span>Cargo × condition</span>
+            <span>Released freight</span>
             <b className="plus">+</b>
-            <span>Bribes · repairs · fines</span>
+            <span>Repairs · duty · fees</span>
             <b className="minus">−</b>
             <span>Reserve {rules.debtTarget}¢</span>
             <b>?</b>

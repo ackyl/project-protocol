@@ -43,7 +43,7 @@ export function TouchControls({ g, runner }: { g: Game; runner: Runner }) {
   const held = heldItem(g)
   const up = canClimb(g, 1),
     down = canClimb(g, 0)
-  const label = repairing ? 'LOCK' : act ? (act.cmd.type === 'stow' && act.cmd.slot === 'vault' ? 'SHIELD' : act.verb.toUpperCase()) : 'USE'
+  const label = repairing ? 'LOCK' : act ? act.verb.toUpperCase() : 'USE'
   return (
     <div className={'touch ' + (portrait ? 'portrait' : 'landscape')} ref={ref}>
       <div className="pad">
@@ -66,7 +66,7 @@ export function TouchControls({ g, runner }: { g: Game; runner: Runner }) {
             LEAVE
           </button>
         ) : (
-          held && (
+          held && g.phase !== 'search' && (
             <button className="small" onClick={runner.drop}>
               DROP
             </button>

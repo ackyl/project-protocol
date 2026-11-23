@@ -1,35 +1,31 @@
 # Project Protocol
 
-**The Cinder Run** is a playable one-day smuggling contract. Walk through the two-deck freighter Mule–07, secure its cargo, repair the power bus and talk your way through Cinder Gate. The settlement records what the ship, the cargo and the bribe actually cost you.
+**The Cinder Run** is a playable smuggling contract set aboard the industrial freighter Mule–07. Use legal freight to cover an unlicensed relay bank. Keep the Choir Cask contained through a power cut, then get past the customs officer at Cinder Gate.
 
 ## Run locally
 
-Tested with Node **24.14.1** and npm **11.11.0**. The toolchain supports Node 22.12+ within 22.x, 24.x or 26+. Use Node 24.x to match the tested runtime.
+Use Node 24.x to match the tested runtime.
 
 ```sh
-npm install
+npm ci
 npm run dev
 ```
 
-Open the local address Vite prints and take the job.
+Open the local address Vite prints. The first delivery offers a guided run that can be skipped or replayed.
 
-| Action | Keyboard | Mouse | Touch |
-| --- | --- | --- | --- |
-| Walk | Hold A/D or ←/→ | Click a spot on either deck | Hold ◀ ▶, or tap a spot |
-| Ladder | W/↑ or S/↓ at the centre ladder (hold to climb on arrival) | Click the other deck or the ladder | ▲/▼ button, or tap the other deck |
-| Grab, stow, repair | E or Space (nearest prompt) | Click the cargo, slot or console | USE button, or tap the target |
-| Drop | Q | Click the courier | DROP button |
-| Lock repair / leave | E or Space / Esc or walk away | Click the gauge | USE (LOCK) / LEAVE |
-| Customs | E search · B bribe · 1/2/3 hand over | Buttons | Buttons |
-| Rivets (breach patch) | Arrows or WASD | Click the arrows | Arrow buttons |
-| Next run / replay route | R or Enter / T | Buttons | Buttons |
-| Sound | M | Speaker button | Speaker button |
+| Action | Keyboard | Mouse and touch |
+| --- | --- | --- |
+| Walk and climb | A/D and W/S, or arrows | Click or tap a deck, or use the touch controls |
+| Grab, stow, or use a station | E or Space | Click or tap the object, or press USE |
+| Drop | Q | Click the carried freight or press DROP |
+| Repair | E to lock the needle. Arrows or WASD for rivets. Esc to leave. | Click or tap the gauge or rivet arrows |
+| Customs | E to allow the search or file at the marker. F to walk and file during a hold. | Choose a response, then walk to the marker or use the walk button |
+| Next run or replay | R or T | Use the receipt buttons |
+| Sound | M | Use the speaker button |
 
-First-time players get a guided training run; it can be skipped and replayed from the job ticket.
+Stow the **relays in the rear rack** and the **heated drums in front**. Keep the bales in the visible berth and the cask in its powered cradle. Four continuous seconds without containment leave an echo for customs. Your layout and the evidence it leaves determine whether the officer accepts a surface check, opens a fixture, or adds another stop.
 
-The orange **cell** cooks while loose or carried; rack it before it vents. The teal **crate** broadcasts until it sits in the shield bay. The green **specimen** pays best but gets agitated outside a cradle and eventually pulses, spoiling itself and blowing nearby rack latches. Each route brings a **power surge** (lock the console's needle in the green, upper deck aft) and a **hull impact** (patch the breach with the rivet sequence); sometimes both at once. The clock never stops. At Cinder Gate you get 20 seconds to hide everything, then customs checks five places. The route code on the ticket identifies the run; *Replay this route* repeats it exactly.
-
-## Verification and deployment
+## Verify and deploy
 
 ```sh
 npm run typecheck
@@ -38,6 +34,6 @@ npm run build
 npm run preview
 ```
 
-The build writes the static game to `dist/`. Vercel can use the **Vite** preset, Node 24.x, `npm ci` for installation, `npm run build` for the build command and `dist` as the output directory. Assets and fonts ship with the build. The game uses no environment variables, server or external runtime services.
+The build writes a static game to `dist/`. For Vercel use the Vite preset, Node 24.x, `npm ci` for installation, and `npm run build` for the build. Assets and fonts are bundled.
 
-The implemented rules, code structure and browser verification results are recorded in [Mechanics](docs/MECHANICS.md), [Architecture](docs/ARCHITECTURE.md) and [Development status](docs/DEVELOPMENT_STATUS.md).
+[High-level game design](docs/HIGH_LEVEL_GAME_DESIGN_DOCUMENT.md) · [Mechanics](docs/MECHANICS.md) · [Architecture](docs/ARCHITECTURE.md) · [Development status](docs/DEVELOPMENT_STATUS.md)

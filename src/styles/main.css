@@ -110,7 +110,8 @@ kbd {
   touch-action: none;
 }
 .phase-highway .stage,
-.phase-prep .stage {
+.phase-prep .stage,
+.phase-search .stage {
   cursor: pointer;
 }
 
@@ -508,7 +509,7 @@ kbd {
   color: var(--text);
   border-left: 5px solid var(--amber);
 }
-.freight li.crate {
+.freight li.relays {
   border-color: #34b3a4;
 }
 .freight img {
@@ -567,7 +568,6 @@ kbd {
   border: 3px solid var(--ink);
   border-top: 4px solid var(--red);
   box-shadow: 0 0 0 2px #3a1a26, 8px 8px 0 rgba(0, 0, 0, 0.4);
-  animation: rise 0.3s ease-out;
 }
 .customs.bottom {
   left: 50%;
@@ -1200,31 +1200,6 @@ kbd {
   font-weight: 800;
   letter-spacing: 1px;
 }
-.cleared {
-  margin-top: 4px;
-  padding: 3px 12px;
-  font: italic 900 18px/1 var(--head);
-  color: var(--ink);
-  background: var(--green);
-  animation: cleared 1.4s ease-out forwards;
-}
-@keyframes cleared {
-  0% {
-    transform: scale(1.4);
-    opacity: 0;
-  }
-  15% {
-    transform: scale(1);
-    opacity: 1;
-  }
-  80% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-  }
-}
-
 /* ── Text buttons ───────────────────────────────────────────────────── */
 .link {
   display: block;
@@ -1614,4 +1589,74 @@ kbd {
   .tut-backdrop.aside .ill {
     display: none;
   }
+}
+
+/* Mixed-manifest search and compartment status. */
+.room-strip {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  font: 800 12px/1.2 var(--head);
+}
+.room-strip span {
+  padding: 3px 6px;
+  color: #bcaf9f;
+  border: 1px solid #514b46;
+  background: #181719;
+}
+.room-strip .here {
+  color: #fff4d6;
+  border-color: #bc9e6f;
+}
+.room-strip .threat, .customs-head .escalated { color: #ffb08a; }
+.room-strip .trace { color: #f4a8cb; }
+.customs {
+  background: rgba(25, 22, 22, .97);
+  border-top-color: #aa7960;
+}
+.customs-head span { white-space: nowrap; }
+.case-evidence {
+  list-style: none;
+  margin-top: 5px;
+  font: 600 15px/1.18 var(--head);
+  color: #ead4b7;
+}
+.case-evidence b { color: #ffb08a; }
+.case-note { font: 600 14px var(--head); color: #ead4b7; }
+.hold-clock { align-self: center; color: #ffd38a; font: 800 16px var(--head); }
+.customs .choices .go { flex: 1 0 140px; }
+.customs .choices .alt { padding-inline: 9px; min-height: 43px; font-size: 17px; }
+.customs .choices .link { flex: 0 0 auto; }
+@media (max-width: 700px) {
+  .room-strip span { padding-inline: 4px; }
+  .customs .choices { gap: 5px; margin-top: 7px; }
+  .customs .choices .go { flex-basis: 100%; min-height: 40px; font-size: 19px; }
+  .customs .choices .alt { flex: 1 1 auto; }
+  .case-evidence { font-size: 14px; }
+}
+.is-touch .customs.bottom { bottom: calc(88px + var(--safe-b)); }
+.phase-search .touch .acts .use { height: 58px; width: 64px; }
+
+.customs.side .choices { align-items: stretch; }
+.customs.side .choices .go { flex: 0 0 auto; }
+@media (max-height: 720px) and (orientation: portrait) {
+  .ticket.bottom { max-height: calc(100% - 112px); overflow-y: auto; }
+  .ticket .freight li { padding-block: 3px; }
+  .ticket .freight img { width: 37px; height: 40px; }
+}
+
+.freight li.cask { border-color: #b47399; }
+@media (max-width: 700px) {
+  .title-mute {
+    position: fixed;
+    top: calc(18px + var(--safe-t));
+    right: calc(12px + var(--safe-r));
+    margin: 0;
+  }
+}
+@media (max-height: 720px) and (orientation: portrait) {
+  .ticket .freight { gap: 5px; }
+  .ticket .controls-hint { margin-top: 6px; }
 }

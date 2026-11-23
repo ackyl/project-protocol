@@ -1,8 +1,8 @@
 // Owns the live snapshot, the fixed-step clock and all player input. React and
 // the canvas renderer both read from here; every change goes through the game's
 // validated `command` and `tick` functions.
-import { cargoIds, rules, type Dir, type Floor } from '../game/content'
-import { atStop } from '../game/customs'
+import { rules, type Dir, type Floor } from '../game/content'
+import { responsePoint } from '../game/customs'
 import {
   canClimb,
   command,
@@ -26,7 +26,6 @@ export interface UiState {
   resultShown: boolean
 }
 
-const SCAN_MS = 900
 const RESULT_DELAY = { delivered: 1300, arrest: 2000, death: 2400 }
 
 export class Runner {
@@ -37,11 +36,8 @@ export class Runner {
   target: Target | null = null
   private holds = new Map<string, Direction>()
   private vertical = new Map<string, Floor>()
-  private pending: { cmd: Command; at: number } | null = null
   /** Tutorial panels freeze the simulation and swallow game input. */
   paused = false
-  /** Presentation hook: true once the officer is in position to scan. */
-  scanReady: () => boolean = () => true
   private resultAt = 0
   private subs = new Set<() => void>()
   private eventSubs = new Set<(e: GameEvent) => void>()
@@ -74,7 +70,7 @@ export class Runner {
   /** Push state to React: immediately after discrete events, otherwise at most 10×/s. */
   private publish(now = performance.now()) {
     const g = this.game
-    const scanning = !!this.pending
+    const scanning = g.phase === 'search' && g.inspection?.stage === 'scan'
     const resultShown = g.phase === 'result' && now >= this.resultAt
     const flags = scanning !== this.ui.scanning || resultShown !== this.ui.resultShown
     if (!flags && !this.urgent && now - this.lastPublish < 100) return
@@ -99,17 +95,11 @@ export class Runner {
 
   // ── Commands ───────────────────────────────────────────────────────────
   send = (cmd: Command) => {
-    if (this.pending) return
-    if (this.game.phase === 'search' && cmd.type === 'inspect') {
-      // Let the officer visibly scan before the roll resolves.
-      this.pending = { cmd, at: performance.now() + SCAN_MS }
-      this.publish()
-      return
-    }
     if ((cmd.type === 'restart' || cmd.type === 'newRun') && !this.ui.resultShown) return
     const before = this.game
     if (this.apply(command(before, cmd))) {
       this.urgent = true
+      if (this.game.phase !== before.phase) this.target = null
       if (cmd.type === 'restart' || cmd.type === 'newRun' || cmd.type === 'accept') {
         this.prev = this.game
         this.target = null
@@ -123,7 +113,13 @@ export class Runner {
     const g = this.game
     if (g.phase === 'contract') return this.send({ type: 'accept' })
     if (g.phase === 'result') return this.send({ type: 'newRun' })
-    if (g.phase === 'search') return this.send({ type: 'inspect' })
+    if (g.phase === 'search') {
+      if (g.inspection?.stage === 'hold') {
+        this.target = null
+        return this.send({ type: 'respond' })
+      }
+      return this.send({ type: 'inspect' })
+    }
     if (g.repairTicks !== null) return this.send({ type: 'stop' })
     if (g.patch !== null) return
     const a = nearest(g)
@@ -135,9 +131,9 @@ export class Runner {
 
   drop = () => this.send({ type: 'drop' })
 
-  surrenderIndex(i: number) {
-    const id = cargoIds.filter((id) => atStop(this.game, id))[i]
-    if (id) this.send({ type: 'surrender', id })
+  walkToResponse = () => {
+    const p = responsePoint(this.game)
+    if (p) this.goTo({ ...p, act: { type: 'respond' } })
   }
 
   climb(to: Floor) {
@@ -172,7 +168,6 @@ export class Runner {
   reset(seed: number) {
     this.game = this.prev = initial(seed)
     this.target = null
-    this.pending = null
     this.eventSubs.forEach((f) => f({ type: 'restart' }))
     this.urgent = true
     this.publish()
@@ -222,12 +217,6 @@ export class Runner {
   }
 
   private step(now: number) {
-    if (this.pending && !this.scanReady()) this.pending.at = now + SCAN_MS
-    if (this.pending && now >= this.pending.at) {
-      const { cmd } = this.pending
-      this.pending = null
-      this.apply(command(this.game, cmd))
-    }
     const slice = 1000 / rules.hz
     if (this.paused || !mobile(this.game)) {
       this.bank = 0
@@ -257,7 +246,11 @@ export class Runner {
     const up = [...this.vertical.values()].at(-1)
     if (up !== undefined && canClimb(this.game, up)) this.send({ type: 'climb', to: up })
     this.prev = this.game
-    this.apply(tick(this.game, dir))
+    const before = this.game
+    this.apply(tick(before, dir))
+    if (before.phase !== this.game.phase ||
+        (before.inspection?.stage === 'hold' && this.game.inspection?.stage !== 'hold' && this.target?.act?.type === 'respond'))
+      this.target = null
   }
 
   /** Verification aid: run the clock forward exactly as live play would. */
@@ -296,7 +289,9 @@ export class Runner {
         return true
       }
       if (e.repeat) return k === 'e' || k === ' ' || k === 'q'
+      if (onButton && (k === 'enter' || k === ' ')) return false
       if (k === 'e' || k === ' ' || (k === 'enter' && !onButton)) return this.interact(), true
+      if (k === 'f' && g.inspection?.stage === 'hold') return this.walkToResponse(), true
       if (k === 'q') {
         if (heldItem(g)) this.drop()
         return true
@@ -307,11 +302,6 @@ export class Runner {
     if (e.repeat) return false
     if (g.phase === 'contract' && (k === 'e' || ((k === 'enter' || k === ' ') && !onButton)))
       return this.interact(), true
-    if (g.phase === 'search') {
-      if (k === 'e' || ((k === 'enter' || k === ' ') && !onButton)) return this.interact(), true
-      if (k === 'b') return this.send({ type: 'bribe' }), true
-      if (k === '1' || k === '2' || k === '3') return this.surrenderIndex(+k - 1), true
-    }
     if (g.phase === 'result' && (k === 'r' || ((k === 'enter' || k === ' ') && !onButton)))
       return this.send({ type: 'newRun' }), true
     if (g.phase === 'result' && k === 't') return this.send({ type: 'restart' }), true

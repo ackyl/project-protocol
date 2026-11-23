@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { Runner } from '../app/runner'
 import { Tutorial, steps } from '../app/tutorial'
-import { breachSites, rules, ship } from '../game/content'
-import { cursor, type Command, type Game } from '../game/simulation'
+import { breachSites, rules, ship, slots } from '../game/content'
+import { cursor, position, type Command, type Game } from '../game/simulation'
 
 /** Drive the real runner and tutorial controller with synthetic frame times. */
 function rig() {
@@ -35,9 +35,9 @@ describe('guided first delivery', () => {
     expect(tut.state.objective).toMatch(/upper deck/)
     frames(30)
     expect(g().ticks).toBeGreaterThan(before.ticks)
-    // The training clock holds and introduced cargo is dormant.
+    // The training clock holds until both drills are complete.
     expect(g().elapsed).toBe(0)
-    expect(g().items.cell.heat).toBe(0)
+    expect(g().exposedTicks).toBe(0)
   })
 
   it('teaches every system in order through real play, then settles and remembers', () => {
@@ -54,21 +54,14 @@ describe('guided first delivery', () => {
     }
     expect(next()).toBe('welcome')
     go(ship.ladder, 1)
-    expect(next()).toBe('cell')
-    frames(30)
-    expect(g().items.cell.heat).toBeGreaterThan(0)
-    go(195, 0, { type: 'pick', id: 'cell' })
-    go(128, 0, { type: 'stow', slot: 'aft' })
-    expect(next()).toBe('crate')
-    go(330, 1, { type: 'pick', id: 'crate' })
-    go(345, 0, { type: 'stow', slot: 'vault' })
-    expect(next()).toBe('specimen')
-    go(268, 1, { type: 'pick', id: 'specimen' })
-    go(306, 1, { type: 'stow', slot: 'upper' })
+    expect(next()).toBe('relays')
+    go(position(g(), 'relays')!.x, 0, { type: 'pick', id: 'relays' })
+    go(slots.rear.x, 0, { type: 'stow', slot: 'rear' })
+    expect(next()).toBe('cover')
+    go(position(g(), 'drums')!.x, 0, { type: 'pick', id: 'drums' })
+    go(slots.front.x, 0, { type: 'stow', slot: 'front' })
     expect(next()).toBe('surge')
     expect(g().fault).toBe(true)
-    // Surge blew the aft latch: the cell is loose again.
-    expect(g().items.cell.location.kind).toBe('loose')
     go(ship.station.x, 1, { type: 'repair' })
     expect(g().repairTicks).not.toBeNull()
     for (let i = 0; i < 200 && g().fault; i++) {
@@ -77,12 +70,7 @@ describe('guided first delivery', () => {
       else frames(1)
     }
     expect(g().fault).toBe(false)
-    frames(2)
-    // Objective-only follow-up: no panel, just a goal.
-    expect(panel()).toBeNull()
-    expect(tut.state.objective).toMatch(/rack it again/)
-    go(128, 0, { type: 'pick', id: 'cell' })
-    go(128, 0, { type: 'stow', slot: 'aft' })
+    expect(g().echo).toBeNull()
     expect(next()).toBe('breach')
     const breach = g().breach!
     expect(breach).not.toBeNull()
@@ -99,8 +87,7 @@ describe('guided first delivery', () => {
     expect(g().phase).toBe('search')
     expect(next()).toBe('search')
     for (let i = 0; i < 400 && g().phase === 'search'; i++) {
-      if (g().stop === 3 && g().items.specimen.location.kind === 'slot') runner.send({ type: 'bribe' })
-      else runner.send({ type: 'inspect' })
+      runner.send({ type: 'inspect' })
       frames(40)
     }
     expect(g().outcome).toBe('delivered')
@@ -117,16 +104,15 @@ describe('guided first delivery', () => {
     tut.dismiss()
     go(ship.ladder, 1)
     frames(2)
-    expect(panel()).toBe('cell')
+    expect(panel()).toBe('relays')
     tut.dismiss()
-    // Secure the crate before its lesson comes up, then the cell.
-    go(330, 1, { type: 'pick', id: 'crate' })
-    go(345, 0, { type: 'stow', slot: 'vault' })
-    go(195, 0, { type: 'pick', id: 'cell' })
-    go(128, 0, { type: 'stow', slot: 'aft' })
-    frames(2)
-    expect(panel()).toBe('specimen')
-    expect(g().items.crate.location).toEqual({ kind: 'slot', slot: 'vault' })
+    go(position(g(), 'drums')!.x, 0, { type: 'pick', id: 'drums' })
+    go(slots.front.x, 0, { type: 'stow', slot: 'front' })
+    go(position(g(), 'relays')!.x, 0, { type: 'pick', id: 'relays' })
+    go(slots.rear.x, 0, { type: 'stow', slot: 'rear' })
+    frames(4)
+    expect(panel()).toBe('surge')
+    expect(g().items.drums.location).toEqual({ kind: 'slot', slot: 'front' })
   })
 
   it('skipping leaves training and opens a fresh contract', () => {

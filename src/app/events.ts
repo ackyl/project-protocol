@@ -1,6 +1,6 @@
 // Presentation events derived by diffing consecutive authoritative snapshots.
 // The simulation stays free of effects; the renderer and audio react to these.
-import { cargoIds, slots, type CargoId, type SiteId, type SlotId } from '../game/content'
+import { cargoIds, slots, type CargoId, type RoomId, type SiteId, type SlotId } from '../game/content'
 import type { Game } from '../game/simulation'
 
 export type GameEvent =
@@ -9,9 +9,7 @@ export type GameEvent =
   | { type: 'pick'; id: CargoId }
   | { type: 'drop'; id: CargoId }
   | { type: 'stow'; id: CargoId; slot: SlotId }
-  | { type: 'ejected'; id: CargoId }
-  | { type: 'surrender'; id: CargoId }
-  | { type: 'vent'; id: CargoId }
+  | { type: 'freightLost'; id: CargoId; cause: 'surrendered' | 'confiscated' }
   | { type: 'hullLoss'; amount: number }
   | { type: 'climbStart'; fromX: number }
   | { type: 'climbEnd' }
@@ -22,7 +20,8 @@ export type GameEvent =
   | { type: 'repairMiss' }
   | { type: 'prep' }
   | { type: 'boarded' }
-  | { type: 'stopCleared'; stop: number; bribed: boolean }
+  | { type: 'scanStarted' }
+  | { type: 'stopCleared' }
   | { type: 'outcome'; outcome: 'delivered' | 'arrest' | 'death' }
   | { type: 'impact'; site: SiteId }
   | { type: 'sealed'; site: SiteId }
@@ -30,7 +29,7 @@ export type GameEvent =
   | { type: 'patchClose' }
   | { type: 'rivet'; progress: number }
   | { type: 'slip' }
-  | { type: 'pulse'; id: CargoId }
+  | { type: 'echo'; room: RoomId }
 
 export function diff(a: Game, b: Game): GameEvent[] {
   if (a === b) return []
@@ -42,13 +41,10 @@ export function diff(a: Game, b: Game): GameEvent[] {
       to = b.items[id].location
     if (from.kind !== to.kind || (from.kind === 'slot' && to.kind === 'slot' && from.slot !== to.slot)) {
       if (to.kind === 'held') out.push({ type: 'pick', id })
-      else if (to.kind === 'surrendered') out.push({ type: 'surrender', id })
+      else if (to.kind === 'surrendered' || to.kind === 'confiscated') out.push({ type: 'freightLost', id, cause: to.kind })
       else if (to.kind === 'slot') out.push({ type: 'stow', id, slot: to.slot })
       else if (from.kind === 'held') out.push({ type: 'drop', id })
-      else if (from.kind === 'slot') out.push({ type: 'ejected', id })
     }
-    if (b.items[id].condition < a.items[id].condition)
-      out.push(b.items[id].agitation < a.items[id].agitation ? { type: 'pulse', id } : { type: 'vent', id })
   }
   if (b.hull < a.hull) out.push({ type: 'hullLoss', amount: a.hull - b.hull })
   if (!a.climb && b.climb) out.push({ type: 'climbStart', fromX: a.player.x })
@@ -68,8 +64,10 @@ export function diff(a: Game, b: Game): GameEvent[] {
   if (a.patch !== null && !b.breach && b.phase === 'highway') out.push({ type: 'rivet', progress: a.breach!.seq.length })
   if (a.phase === 'highway' && b.phase === 'prep') out.push({ type: 'prep' })
   if (a.phase === 'prep' && b.phase === 'search') out.push({ type: 'boarded' })
-  if (a.phase === 'search' && (b.stop > a.stop || (b.phase === 'result' && b.outcome === 'delivered')))
-    out.push({ type: 'stopCleared', stop: a.stop, bribed: b.cash < a.cash })
+  if (a.inspection?.stage !== 'scan' && b.inspection?.stage === 'scan') out.push({ type: 'scanStarted' })
+  if (a.phase === 'search' && (a.inspection?.index !== b.inspection?.index || b.outcome === 'delivered'))
+    out.push({ type: 'stopCleared' })
+  if (!a.echo && b.echo) out.push({ type: 'echo', room: b.echo })
   if (a.phase !== 'result' && b.phase === 'result' && b.outcome) out.push({ type: 'outcome', outcome: b.outcome })
   return out
 }

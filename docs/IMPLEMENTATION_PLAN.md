@@ -44,7 +44,13 @@ Astra should execute **all** milestones below during the kickoff, not stop at sc
 - Feedback: cargo status strip, distinct emergency colours and sounds, stacked callouts.
 - Verification and results: [Development status](DEVELOPMENT_STATUS.md).
 
-## Next: chunk 3 — the week (not started)
+## Chunk 3 — mixed-manifest redesign (complete)
+
+1. Establish a paired rack and evidence-led customs on the existing ship. Verify clearance, citation, surrender, confiscation, and arrest.
+2. Tie the cask’s persistent evidence to the power fault. Extend the freighter, follow the courier, and surface offscreen activity.
+3. Update the guided delivery and settlement. Verify the production preview on desktop, narrow portrait, and short portrait. Results are in [Development status](DEVELOPMENT_STATUS.md).
+
+## Future — the week (not started)
 - Five-day campaign with escalating director settings (more hazards, tighter overlaps, harsher customs).
 - Weekly syndicate quota and what happens when it is missed.
 - Shop and upgrades between days (for example better racks, a second shielded slot, console tuning).

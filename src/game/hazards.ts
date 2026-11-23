@@ -10,7 +10,7 @@ export interface Hazard {
   seq?: Dir[]
 }
 
-/** Small deterministic generator, independent of the customs RNG. */
+/** Small deterministic generator for the highway schedule and repair patterns. */
 export function stream(seed: number) {
   let s = (seed ^ 0x5bd1e995) >>> 0
   return () => {

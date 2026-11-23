@@ -6,7 +6,7 @@ import { nextSeed } from '../game/hazards'
 import { type Command, type Game } from '../game/simulation'
 import type { Runner } from './runner'
 
-const KEY = 'pp-tutorial-done'
+const KEY = 'pp-manifest-tutorial-done'
 export function tutorialDone() {
   try {
     return localStorage.getItem(KEY) === '1'
@@ -22,7 +22,7 @@ function markDone() {
   }
 }
 
-export type Art = 'move' | 'cell' | 'crate' | 'specimen' | 'surge' | 'breach' | 'prep' | 'search' | 'payday'
+export type Art = 'move' | 'cargo' | 'cover' | 'surge' | 'breach' | 'prep' | 'search' | 'payday'
 export interface Focus {
   x: number
   floor: Floor
@@ -42,7 +42,7 @@ export interface Step {
   ready: (g: Game, resultShown: boolean) => boolean
   /** The player has demonstrated the mechanic. */
   done?: (g: Game) => boolean
-  /** Commands sent when the panel closes (wake cargo, start a drill). */
+  /** Commands sent when the panel closes (for example, start a drill). */
   enter?: Command[]
   /** Commands sent when the objective completes. */
   after?: Command[]
@@ -51,10 +51,13 @@ export interface Step {
   silent?: boolean
 }
 
-const inSlot = (g: Game, id: CargoId) => g.items[id].location.kind === 'slot'
+const inSlot = (g: Game, id: CargoId, slot: keyof typeof slots) => {
+  const loc = g.items[id].location
+  return loc.kind === 'slot' && loc.slot === slot
+}
 const at = (g: Game, id: CargoId): Focus | null => {
   const loc = g.items[id].location
-  if (loc.kind === 'held' || loc.kind === 'surrendered') return null
+  if (loc.kind !== 'loose' && loc.kind !== 'slot') return null
   const p = loc.kind === 'slot' ? slots[loc.slot] : loc
   return { x: p.x, floor: p.floor, w: 30, h: 34 }
 }
@@ -82,60 +85,40 @@ export const steps: Step[] = [
     focus: () => ({ x: ship.ladder, floor: 0, w: 26, h: 128 }),
   },
   {
-    id: 'cell',
-    title: 'Handle contraband',
+    id: 'relays',
+    title: 'Load the rear rack',
     lines: [
-      'The Volatile Cell cooks while it is loose or in your hands. At 100% it vents and wrecks hull and cargo.',
-      'Any cargo cradle cools it down. Carry it there and stow it.',
+      'Your manifest lists drums and gasket stock. It omits the warm relay bank with its duty plate scraped off.',
+      'Carry the relays to the rear rack. The front rack is reserved for legal freight.',
     ],
-    keys: [
-      [['E'], 'Grab / stow'],
-      [['Q'], 'Drop'],
-    ],
-    touch: 'Tap the cell to grab it, then tap a cradle. DROP puts it down.',
-    art: 'cell',
-    objective: 'Stow the Volatile Cell in a cargo cradle',
+    keys: [[['E'], 'Grab / stow'], [['Q'], 'Drop']],
+    touch: 'Tap the relays, then tap the rear rack.',
+    art: 'cargo',
+    objective: 'Stow the relay bank in the rear rack',
     ready: highway,
-    done: (g) => inSlot(g, 'cell'),
-    enter: [{ type: 'train', wake: 'cell' }],
-    focus: (g) => (g.items.cell.location.kind === 'held' ? slotFocus('aft') : at(g, 'cell')),
+    done: (g) => inSlot(g, 'relays', 'rear'),
+    focus: (g) => g.items.relays.location.kind === 'held' ? slotFocus('rear') : at(g, 'relays'),
   },
   {
-    id: 'crate',
-    title: 'Loud cargo',
+    id: 'cover',
+    title: 'Give the heat a source',
     lines: [
-      'The Signal Crate never stops broadcasting. Customs hears it from a rack 80% of the time.',
-      'Only the shield bay on the lower deck blocks the signal completely.',
+      'The declared bearing drums run warm. In the front rack they obscure the relays and give customs a plausible explanation for a second heat return.',
+      'The gasket bales satisfy the count in the open berth. They block sight if you put them in front, but cannot explain heat.',
     ],
     keys: [[['E'], 'Grab / stow']],
-    touch: 'Tap the crate, then tap the teal shield bay.',
-    art: 'crate',
-    objective: 'Put the Signal Crate in the shield bay',
+    touch: 'Tap the drums, then tap the front rack.',
+    art: 'cover',
+    objective: 'Stow the heated bearing drums in the front rack',
     ready: highway,
-    done: (g) => g.items.crate.location.kind === 'slot' && g.items.crate.location.slot === 'vault',
-    focus: (g) => (g.items.crate.location.kind === 'held' ? slotFocus('vault', 50, 58) : at(g, 'crate')),
-  },
-  {
-    id: 'specimen',
-    title: 'Live cargo',
-    lines: [
-      'The Bio Specimen pays best and hates being out of containment.',
-      'Left loose it gets agitated, then pulses: it loses value, blows rack latches on its deck and knocks you off any station there.',
-    ],
-    keys: [[['E'], 'Grab / stow']],
-    touch: 'Tap the jar, then tap a free cradle.',
-    art: 'specimen',
-    objective: 'Contain the Bio Specimen in a free cradle',
-    ready: highway,
-    done: (g) => inSlot(g, 'specimen'),
-    enter: [{ type: 'train', wake: 'specimen' }],
-    focus: (g) => (g.items.specimen.location.kind === 'held' ? null : at(g, 'specimen')),
+    done: (g) => inSlot(g, 'drums', 'front'),
+    focus: (g) => g.items.drums.location.kind === 'held' ? slotFocus('front') : at(g, 'drums'),
   },
   {
     id: 'surge',
     title: 'Emergency: power surge',
     lines: [
-      'Surges black out the ship, drain the hull every second and blow ordinary rack latches. A racked specimen stirs while the power is down.',
+      `A power cut drains the hull and takes the Choir Cask out of containment. After ${rules.echoSeconds} seconds it leaves an echo that customs can hear even after repairs.`,
       'Get to the console with empty hands and lock the needle inside the green band.',
     ],
     keys: [
@@ -149,19 +132,6 @@ export const steps: Step[] = [
     done: (g) => !g.fault,
     enter: [{ type: 'trigger', hazard: 'surge' }],
     focus: () => ({ x: ship.station.x, floor: 1, w: 40, h: 50 }),
-  },
-  {
-    id: 'relatch',
-    title: 'Latch blown',
-    lines: [],
-    keys: [],
-    touch: '',
-    art: 'cell',
-    silent: true,
-    objective: 'The surge knocked the cell loose — rack it again',
-    ready: highway,
-    done: (g) => inSlot(g, 'cell'),
-    focus: (g) => (g.items.cell.location.kind === 'held' ? null : at(g, 'cell')),
   },
   {
     id: 'breach',
@@ -188,7 +158,7 @@ export const steps: Step[] = [
     title: 'Customs ahead',
     lines: [
       `Cinder Gate is close. You have ${rules.prep} seconds before the officer boards.`,
-      'Tags under each item show the odds of it being found where it sits. Loose or carried cargo is always found.',
+      'Read the tags under your freight. Keep legal goods visible, the relays behind the drums, and the cask in its cradle. Shore power seals the cradle, but any echo is still on record.',
     ],
     keys: [[['E'], 'Move cargo']],
     touch: 'Tap cargo and cradles to rearrange.',
@@ -199,15 +169,11 @@ export const steps: Step[] = [
     id: 'search',
     title: 'The search',
     lines: [
-      'The officer checks five places in order. At each one you choose:',
-      `Let them search and risk the odds, bribe ${rules.bribe}¢ to skip that check, or hand over an item to protect the rest.`,
+      'The officer follows the evidence. At two suspicion points the officer opens the fixture tied to the strongest clue. Three points triggers a room search and a containment check.',
+      'If challenged over the extra heat, cite the heated lubricant and reach the docket. You can also give up a disputed item. Surrender clears its live signal, but a recorded echo stays on file.',
     ],
-    keys: [
-      [['E'], 'Search'],
-      [['B'], 'Bribe'],
-      [['1', '2', '3'], 'Hand over'],
-    ],
-    touch: 'Use the buttons in the officer’s box.',
+    keys: [[['E'], 'Search or file at the marker'], [['F'], 'Walk and file during a hold']],
+    touch: 'Choose a response in the officer’s box, then tap the marker or Walk to docket.',
     art: 'search',
     ready: (g) => g.phase === 'search',
   },
@@ -215,8 +181,8 @@ export const steps: Step[] = [
     id: 'payday',
     title: 'Payday',
     lines: [
-      'The receipt is the score: cargo pays by its condition, then bribes, hull repairs and fines come out.',
-      `Finish under ${rules.debtTarget}¢ and you owe the syndicate. Every vent, pulse and breach on the way showed up here.`,
+      'The receipt records what arrived, what you gave up, and the hull repairs and duties you owe.',
+      `Finish under ${rules.debtTarget}¢ and the syndicate records a reserve shortfall.`,
     ],
     keys: [[['R'], 'Next run']],
     touch: 'Tap NEXT RUN for a new route.',
@@ -232,12 +198,10 @@ export interface TutorialState {
   /** Panel currently covering the game. */
   panel: Step | null
   objective: string | null
-  /** Bumps each time an objective is completed (for a short ✓ flash). */
-  cleared: number
 }
 
 export class Tutorial {
-  state: TutorialState = { active: false, index: 0, panel: null, objective: null, cleared: 0 }
+  state: TutorialState = { active: false, index: 0, panel: null, objective: null }
   private subs = new Set<() => void>()
   private waiting = false
   private unsub: (() => void) | null = null
@@ -309,7 +273,7 @@ export class Tutorial {
     const g = this.runner.game
     const ui = this.runner.ui
     // A failed or finished run goes straight to the payday lesson.
-    if (g.phase === 'result' && steps[this.state.index].id !== 'payday') {
+    if (g.phase === 'result' && steps[this.state.index]?.id !== 'payday') {
       this.waiting = false
       this.set({ index: steps.findIndex((s) => s.id === 'payday'), objective: null })
       return
@@ -319,7 +283,7 @@ export class Tutorial {
     if (this.waiting) {
       if (step.done?.(g)) {
         step.after?.forEach((c) => this.runner.send(c))
-        this.advance({ cleared: this.state.cleared + 1 })
+        this.advance()
       }
       return
     }

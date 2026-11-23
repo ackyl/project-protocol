@@ -3,10 +3,10 @@
 **Game Title:** Project Protocol (working title); The Cinder Run is the playable delivery.
 
 **Game Concept:**
-A fast-paced, single-player sci-fi survival game about a disposable smuggler transporting dangerous contraband through a hostile intergalactic highway. Physically secure cargo, keep a failing ship operational, and evade customs while protecting the income needed to satisfy a criminal syndicate’s weekly quota. The first deliverable is one complete delivery, with the week-long campaign reserved for later development.
+A single-player survival game about an underpaid courier hauling mundane freight and forbidden anomalies through a hostile intergalactic highway. Keep the ship running, assemble a believable mixed manifest, and survive customs when the impossible leaves evidence. The playable scope is one delivery.
 
 **X, But Y:**
-*Barotrauma* meets *Papers, Please*, but you’re a desperate space courier surviving one illegal delivery at a time. Ship emergencies and concealment compete for the same resource: one courier who can physically be in only one place at a time.
+*Barotrauma* meets *Papers, Please*, but you’re a desperate space courier surviving one illegal delivery at a time. One courier must cross the ship to fix emergencies, arrange a believable load, and respond when an inspector finds something the paperwork cannot explain.
 
 ---
 
@@ -22,14 +22,14 @@ A fast-paced, single-player sci-fi survival game about a disposable smuggler tra
 **Core Mechanics:**
 - **Handle:** Pick up, carry, drop, and stow dangerous freight; choose which cargo deserves scarce protection.
 - **Repair:** Walk to emergencies and complete short station minigames while transit and other threats continue.
-- **Evade:** Conceal cargo before customs, then allow searches, pay bribes, or surrender freight during inspection.
-- **Manage:** Weigh cargo income against damage, bribes, and penalties; longer-term, balance supplies against syndicate debt.
+- **Evade:** Build a credible cover load before customs, then permit a search, cite the manifest, or surrender freight during inspection.
+- **Manage:** Weigh cargo income against damage, forfeiture, and penalties; longer-term, balance supplies against syndicate debt.
 
 **Core Loop:**
 
 Accept contract → Secure cargo and survive highway travel → Prepare for customs → Make inspection decisions → Deliver or fail → Settle income and penalties → Repeat
 
-Cargo placement shapes both survival and inspection risk. Repairs consume time that could protect freight; concealment and bribes preserve a delivery at the cost of other cargo or earnings. The settlement makes those tradeoffs explicit. Shopping between deliveries belongs to the future campaign loop.
+Cargo placement shapes both survival and inspection risk. Repairs consume time that could protect freight; a persuasive manifest preserves earnings and surrender can salvage a compromised delivery. The settlement makes those tradeoffs explicit. Shopping between deliveries belongs to the future campaign loop.
 
 **Progression:**
 The first delivery teaches one system at a time, then asks players to combine them under pressure. Replaying routes builds mastery; new route seeds vary emergency timing, order, and location. The longer-term arc is five increasingly dangerous days, one significant delivery per day, culminating in a weekly quota. Campaign escalation and upgrades remain future scope.
@@ -38,15 +38,15 @@ The first delivery teaches one system at a time, then asks players to combine th
 
 **Must Have:**
 - One complete browser-playable delivery: contract, highway emergencies, timed customs preparation, interactive search, settlement, and restart.
-- A 2D side-view ship with two walkable decks, ladders, and the entire playable interior visible on one screen; walking and climbing, with no jumping.
-- Three physical cargo types, two ordinary racks, and one contested shield bay.
+- A side-view ship with two walkable decks, four compartments, one ladder, and a camera that follows the courier. The courier walks and climbs.
+- A four-item manifest with legal, gray-market, and anomalous freight. A paired rack gives legal freight a purpose as cover, and a powered cradle suppresses the anomaly.
 - Two distinct emergencies and short repair minigames that create competing demands during real-time transit.
 - A skippable, replayable guided first delivery, followed by reproducible routes.
 - Distinct consequences for arrest, ship damage, death, and financial shortfall, with readable money accounting.
 - Keyboard, mouse, and touch interaction, clear warnings, and readable desktop and phone layouts.
 
 **Not Included:**
-- Multiplayer, manual piloting, combat, jumping, elaborate physics simulation, crafting, crew simulation, procedural worlds, or branching story campaigns.
+- Multiplayer, manual piloting, combat, jumping, elaborate physics simulation, crafting, crew simulation, procedural worlds, or branching story campaigns, forged documents, bribes, or diversion systems in this slice.
 - Five-day progression, shops, upgrades, campaign saves, or an enforced weekly quota in the initial delivery. These remain future work; their detailed design is TBD.
 
 ---
@@ -56,14 +56,14 @@ The first delivery teaches one system at a time, then asks players to combine th
 ## 2.1 Gameplay
 
 **Player Interactions:**
-The courier walks horizontally and climbs between decks. Cargo must be physically reached, carried one item at a time, and placed in a slot or dropped; it can be retrieved from any slot. Repairs require empty hands and presence at the station or breach. Players use keyboard movement and contextual actions, click or tap destinations and objects, or use touch controls. Customs choices use explicit actions with visible detection risk and cost.
+The courier walks horizontally and climbs between decks. Cargo must be physically reached, carried one item at a time, and placed in a slot or dropped; it can be retrieved from any slot. Repairs require empty hands and presence at the station or breach. Players use keyboard movement and contextual actions, click or tap destinations and objects, or use touch controls. Customs choices show the evidence and the impending search. The courier can walk to a local docket or freight position during a procedural hold.
 
 **Gameplay Systems:**
-- **Ship and cargo:** The Volatile Cell heats outside a slot; the Signal Crate broadcasts unless shielded; the high-paying Bio Specimen needs containment. Its pulses damage its condition, release ordinary rack latches on its deck, and interrupt nearby station work. Power loss destabilizes a specimen in an ordinary rack. Three cargo items compete for three slots, with the shield bay providing the strongest protection.
-- **Highway emergencies:** Travel advances automatically on a real-time countdown. Each seeded route includes a power surge and a hull impact, deliberately separated or overlapped. The surge can eject an unshielded cell and drains hull until repaired with a timing lock at the fixed console. An impact opens a breach at a variable site, repaired through an ordered rivet sequence; wrong rivets cost hull. Zero hull causes death. Route codes support reproducible retries.
-- **Customs:** A timed preparation phase lets the player rearrange cargo before handling locks for the search. The officer checks decks and slots in sequence. Loose or carried cargo is exposed; ordinary racks conceal some freight better than others; the shield bay hides its occupant. At each stop, the player can permit inspection, buy guaranteed clearance, or surrender an item. Detection causes arrest and forfeiture. Search decisions themselves have no timeout; highway cargo deterioration and damage stop at the checkpoint.
-- **Settlement:** Surviving cargo pays according to condition. Bribes, repairs, impound fees, and wreck charges produce different financial outcomes. Surrendered or seized cargo earns nothing. A reserve shortfall is a warning in the slice, rather than an enforced campaign failure. Players can replay the same route or start the next seed.
-- **Guided first delivery:** Paused lesson panels introduce systems before real demonstrations. The highway clock holds until drills are complete, cargo hazards wake for their lessons, and already-demonstrated lessons are skipped. The gate, customs, and settlement use normal rules. Training can be skipped and replayed.
+- **Ship and cargo:** The rear rack can be hidden behind legal freight, and the front load must explain what the scanner reads. The Choir Cask needs powered containment. Prolonged exposure leaves a persistent echo in a compartment.
+- **Highway emergencies:** Travel advances on a real-time countdown. A seeded power fault and hull breach can overlap. Repair uses a timing lock at the console and an ordered rivet sequence at the breach. A power fault also puts the cask’s containment on a clock.
+- **Customs:** The courier rearranges freight during timed prep. The officer reviews declarations, traces, and exposed freight, then opens fixtures or adds stops when suspicion escalates. A physical citation or surrender can change the evidence before the scan. Gray-market discovery costs one item and a fine. Forbidden discovery causes arrest.
+- **Settlement:** The receipt distinguishes delivered, surrendered, confiscated, and impounded cargo, and lists repairs, duties, and other charges. The slice reports a reserve shortfall as a warning. Players can replay the same route or start a new one.
+- **Guided first delivery:** Paused lessons teach loading, cover, and repairs through play. The highway clock holds through the drills. Customs and settlement use normal rules. Training can be skipped or replayed.
 
 **Progression:**
 Within one delivery, handling develops into emergency prioritization, then concealment and financial decisions. Across retries, seeded variations test the same capabilities without adding new systems. Future days are intended to increase danger through escalating hazards and customs pressure, with shopping and upgrades between days. Exact escalation, shop contents, and missed-quota consequences are TBD. Detailed prototype rules and tuning live in [Mechanics](MECHANICS.md); delivery order and implemented status live in [Implementation plan](IMPLEMENTATION_PLAN.md) and [Development status](DEVELOPMENT_STATUS.md).
@@ -75,16 +75,16 @@ Within one delivery, handling develops into emergency prioritization, then conce
 ## 2.2 Visuals
 
 **Art Direction:**
-Cartoonish, colorful retro-futuristic science fiction with grimy industrial machinery and dark comedy. Chunky pixel-art presentation makes rooms, freight, and danger readable at a glance.
+Industrial retro-futurist pixel art, scuffed freight stencils, heavy containment hardware, and understated cosmic horror. The inspector records impossible readings in the same dry language used for a missing bale.
 
 **Visual References:**
 Project Dungeon informs usability and technical discipline only; its monochrome aesthetic is not the target. Specific external visual references are TBD.
 
 **UI/UX Direction:**
-The ship is the main play surface, with a compact persistent HUD for hull, time, cargo status, money, and the current objective. Contextual prompts identify reachable actions; cargo warnings and customs risk previews explain consequences before commitment. Every playable deck, slot, and station stays visible without scrolling. Desktop and landscape show the full hull; portrait may crop only non-playable extremities. Training panels pause for reading, while normal repairs retain live pressure. Settlement clearly separates income and charges.
+The ship is the main play surface. The compact HUD names compartments and highlights offscreen threats, the courier, and the officer’s next stop. Context prompts show nearby actions. Preparation labels explain cargo exposure and the inspection panel shows suspicion and its causes. The receipt separates delivered cargo and charges.
 
 **Visual Characteristics:**
-Chunky silhouettes, legible walkways, industrial racks, a distinct shield bay, vibrant cargo, and visible damage distinguish function. Courier carrying and climbing poses communicate action. Red electrical, cyan vacuum, and magenta biological warnings distinguish emergencies; gauges, markers, and labels reinforce color cues. Repair feedback, cargo pulses, and the officer’s scan communicate events without obscuring the ship. Use restrained effects consistent with the documented performance pass.
+Keep deck edges, the ladder, and the courier silhouette readable under emergency lighting. Distinguish sealed legal freight, the scraped relay case, and the cask’s narrow acoustic slit. Use restrained warm scanner light, local emergency cues, and a marked echo. Use text and shapes alongside color.
 
 ## 2.3 Narrative
 
@@ -92,7 +92,7 @@ Chunky silhouettes, legible walkways, industrial racks, a distinct shield bay, v
 A hostile intergalactic highway where dangerous contraband passes through customs checkpoints. The slice follows the freighter Mule–07 on the Cinder Run toward Cinder Gate. Broader geography, history, and era are TBD.
 
 **Narrative Premise:**
-The player is a disposable courier working under a criminal syndicate’s financial demands. Survive the trip and preserve enough illegal cargo income to keep debt manageable. The intended campaign ends with the weekly quota coming due; the slice expresses these stakes through a single delivery’s costs and reserve warning.
+The courier is a replaceable contractor under a criminal syndicate’s financial demands. Survive the trip and pass a freight inspection while transporting something that can answer a sound before it happens. The intended campaign ends with the weekly quota coming due; the slice expresses these stakes through a single delivery’s costs and reserve warning.
 
 **Characters:**
 - **Courier:** The player’s vulnerable, physically present smuggler, responsible for every urgent task aboard.
@@ -108,7 +108,7 @@ Contracts establish the job; cargo behavior and ship damage create the journey�
 Energetic breakbeats and synths support frantic highway survival. Music is future work; the prototype may rely on original procedural sound cues. Specific tracks and phase-dependent arrangement are TBD; do not import copyrighted tracks.
 
 **Sound Effects:**
-Mechanical footsteps, cargo clunks, accelerating heat warnings, electrical alarms, breach hiss, rivet strikes, specimen chirps and pulses, and customs scans identify actions and threats. Repair, payment, arrest, and wreck cues distinguish outcomes. Sound reinforces readable visual feedback and supports muting.
+Mechanical footsteps, cargo clunks, containment warnings, electrical alarms, breach hiss, rivet strikes, the anomalous echo, and customs scans identify actions and threats. Repair, payment, arrest, and wreck cues distinguish outcomes. Sound reinforces readable visual feedback and supports muting.
 
 **Audio References:**
 Specific game, artist, and track references are TBD. The established direction is breakbeat energy, synthesized instrumentation, and distinct industrial and cargo warning cues.

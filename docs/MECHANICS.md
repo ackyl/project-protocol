@@ -1,108 +1,59 @@
 # Project Protocol — Implemented prototype mechanics
 
-These values describe the playable Cinder Run contract. They are adjustable prototype tuning. Money is written CR here and shown as ¢ in the game. The confirmed design decisions remain in [High-level GDD](HIGH_LEVEL_GAME_DESIGN_DOCUMENT.md). The simulation reads its balance, cargo, ship and director definitions from [content.ts](../src/game/content.ts).
+The Cinder Run is one playable delivery. The [high-level GDD](HIGH_LEVEL_GAME_DESIGN_DOCUMENT.md) sets the design intent. The values below describe current tuning and are defined in [content.ts](../src/game/content.ts).
 
-## Ship and handling
+## Ship and controls
 
-Mule–07 has a fixed side view with three structural bays on each of two walkable decks. The courier starts downstairs at x=213. Each fixed simulation step advances 1/30 second. Walking covers 90 ship units per second within x=88–386. A climb starts within 12 units of x=239, aligns the courier with the ladder and takes 15 ticks. Holding up or down while walking into range starts the climb on arrival. During a climb, horizontal movement and cargo actions are locked. A climb still underway when inspection begins leaves the courier on the departure deck.
+Mule–07 has two walkable decks, four compartments, and one ladder at x=239. Engineering and the Airlock occupy the upper deck. The Freight Hold and Containment occupy the lower deck. The walkable span is x=88–460. The courier walks at 90 units/s and a climb takes 0.5 s. The camera follows the courier horizontally in active play and the HUD names each room, with markers for the courier, the officer’s destination, active emergencies, and the residual echo.
 
-Cargo interactions require the same floor and a horizontal distance of at most 13 units. A free hand can pick up loose or stowed cargo. A held item follows the courier between decks. Drop puts it at the courier's feet. Stow inserts it into one vacant slot. Cargo can be retrieved from every slot. Clicking or tapping a spot, item, slot, console or breach walks the courier there (via the ladder if needed) and performs that one action on arrival. It issues the same commands as the keys, so every rule here still applies.
+One item can be carried between decks. Pick up, drop, and stow must be local to the courier’s deck and within 13 units. Stowing requires a vacant compatible fixture. Clicking or tapping walks to the target and applies the same validated commands as keyboard or touch controls. Repairs require empty hands.
 
-| Location | Deck | x | Use |
-| --- | --- | ---: | --- |
-| Aft rack | Lower | 128 | Ordinary cargo slot |
-| Power console | Upper | 138 | Repair a power fault |
-| Upper rack | Upper | 306 | Ordinary cargo slot |
-| Shield bay | Lower | 345 | Cargo slot with signal shielding, a surge-resistant latch and a sealed environment |
-| Breach sites | Lower x=104 (aft plating), lower x=292 (keel seam), upper x=372 (bow plating) | | Where an impact can open the hull |
+| Fixture | Room | Rules |
+| --- | --- | --- |
+| Front rack (x125) | Freight Hold | Accepts legal cargo. Its occupant blocks a surface view of the rear rack. |
+| Rear rack (x163) | Freight Hold | Accepts any item. An uncovered rear occupant is visible. |
+| Open berth (x213) | Freight Hold | Accepts any item. Its occupant is visible. |
+| Powered cradle (x403) | Containment | Accepts only the Choir Cask. Suppresses its live reply while powered. |
 
-Stations (console, breach patch) need empty hands. While working one, the courier cannot move or climb. Leaving (Esc, the Leave button, walking or clicking elsewhere) closes it.
+## Manifest and containment
 
-## Freight
+| Cargo | Status | Starting location | Full payout | Behavior |
+| --- | --- | --- | ---: | --- |
+| Heated Bearing Drums | Declared legal freight | Loose, Freight Hold | 20 CR | A legal load in either visible fixture. Explains a rear heat return only when in the front rack. |
+| Gasket Bales | Declared legal freight | Open berth | 15 CR | Counts toward the manifest when in a visible fixture. Can hide the rear contents by sight. |
+| Unlicensed Relay Bank | Gray-market freight | Loose, Freight Hold | 40 CR | Exposed in the open. In the rear rack it leaves a heat return whose meaning depends on the front load. |
+| Choir Cask | Forbidden anomaly | Powered cradle | 90 CR | Four continuous seconds outside powered containment during transit leave one echo in the compartment it occupies at that moment. |
 
-The ship departs with 100 hull. Every item starts at 100% condition, and pays its value multiplied by its remaining condition. Three items and three slots mean the shield bay is always contested.
+The cask remains physically latched during a power outage. Resealing it resets exposure before an echo forms. An existing echo stays in its original room through repairs, cargo moves, docking, and surrender. At the checkpoint, shore power stabilizes the cradle and transit damage stops. An unsealed cask still answers customs scans.
 
-| Freight | Start | Full payout | Behaviour |
-| --- | --- | ---: | --- |
-| Volatile Cell | Lower deck, x=195 | 70 CR | Gains 2.5 heat/s loose or carried. Any slot cools it by 10 heat/s, down to zero. At 100 heat it vents, resets to zero, removes 16 hull and 20 condition points. |
-| Signal Crate | Upper deck, x=330 | 50 CR | Broadcasts outside the shield bay. An ordinary rack still leaves a signal for customs. |
-| Bio Specimen | Upper deck, x=268 | 90 CR | Gains 4 agitation/s loose or carried. In a powered ordinary rack, or in the shield bay at any time, it loses 8/s. In an ordinary rack during a power fault it gains 3/s. At 100 it **pulses**. |
+## Highway emergencies
 
-When the specimen pulses:
+A run lasts 90 s. The route code seeds one surge and one impact, including impact site and rivet order. The surge occurs at 28–46 s. The director schedules an overlap on 35% of routes by placing the impact 1–4 s after the surge. Otherwise it separates them by at least 16 s within the 16–74 s impact window.
 
-- Its agitation drops to 35, so it pulses again soon if it stays out.
-- It loses 20 condition points.
-- Every ordinary rack on its deck releases its occupant, which lands loose at the rack. The shield bay holds.
-- A console or patch being worked on that deck is interrupted.
-
-Highway heating, agitation and damage stop at the checkpoint.
-
-## Highway hazards
-
-Travel lasts 90 seconds. Every run schedules one **power surge** and one **hull impact** from the run seed (`src/game/hazards.ts`). The schedule is part of the game state, independent of the customs RNG, so a seed always replays identically.
-
-| Director rule | Value |
-| --- | --- |
-| Surge time | Seeded within 28–46 s |
-| Overlap (35%) | The impact lands 2–5 s after the surge, so both emergencies run at once |
-| Otherwise | The impact lands at least 16 s before or after the surge, within 16–74 s |
-| Impact site and rivet order | Seeded |
-
-A scripted competent player survived 150 consecutive seeds, ending with 82–88 hull. About one run in six forced both emergencies at once (see `src/tests/fairness.test.ts`).
-
-**Power surge.** The power bus faults:
-
-- An unshielded cell heats to at least 70. If it sits in an ordinary rack, it falls loose at that rack.
-- The shield bay protects its occupant.
-- The fault removes 2 hull on each whole second until repaired.
-
-At the console, the cursor travels end to end and back over 54 ticks (1.8 s). Lock within the inclusive 38–69% band to clear the fault. A miss resets the sweep. Repairs stop further drain and keep existing damage.
-
-**Hull impact.** The impact removes 8 hull and opens a breach at the site. The breach removes 1 hull on each whole second until it is patched.
-
-At the breach, drive four rivets in the order shown, using the arrow keys or WASD, or by tapping or clicking the arrows. A wrong rivet slips the plate: it removes 3 hull and restarts the sequence. Sealing leaves a welded plate on the wall.
-
-The surge's 2 hull/s and the breach's 1 hull/s stack when both are open. At zero hull the courier dies immediately.
+- **Surge.** The power fault removes 2 hull/s and shuts off the cradle. At Engineering, lock the cursor inside the 38–69% band. The sweep repeats every 1.8 s. A miss restarts the sweep. A successful lock restores power and stops that hull drain.
+- **Impact.** The impact removes 8 hull and opens a breach that removes 1 hull/s. At the breach, drive four rivets in the order shown. A wrong rivet removes 3 hull and resets the sequence.
+- **Hull failure.** Drains stack and zero hull ends the run. Damage incurred before the checkpoint counts against settlement.
 
 ## Customs
 
-Surviving transit starts a fresh 20-second preparation clock. The courier can still walk, climb, pick up, drop and stow. Open stations close. Each item shows the detection chance it would face where it currently sits, using the same table as the search. After prep, movement and cargo handling lock for the entire search.
+Preparation lasts 20 s. Cargo labels preview whether goods are declared, exposed, plausibly covered, or leaving a reply. Loose cargo is part of the scan, and carried cargo is set down where the courier stands at boarding. Rearrangement then locks. Movement and climbing remain available.
 
-The officer visits the lower deck, upper deck, aft rack, upper rack and shield bay in that order. Floor sweeps cover loose cargo and the courier's hand on that deck. Slot searches cover only their occupant. The officer walks to each location and scans it. The customs dialog shows what is there and the exact detection odds before you choose.
+The Airlock and Freight Hold are always checked. Its starting route also includes any other room with loose cargo or a residual echo. If suspicion reaches 3, customs adds Containment if it was absent from the route.
 
-| Cargo position | Volatile Cell | Signal Crate | Bio Specimen |
-| --- | ---: | ---: | ---: |
-| Loose or in hand on the searched deck | 100% | 100% | 100% |
-| Ordinary rack | 0% | 80% | 50% |
-| Shield bay | 0% | 0% | 0% |
+| Evidence in the current room | Suspicion |
+| --- | ---: |
+| One or more declared items missing from visible fixtures | +1, once in the Freight Hold |
+| Heat from rear relays with verified front drums | +1 |
+| Heat from rear relays without matching front cover | +2 |
+| Residual echo or live anomalous reply | +2 each |
+| Unsupported citation | +1 |
 
-- **Allow inspection** resolves this location. Detection immediately causes arrest and forfeiture of all remaining freight.
-- **Skip for 25 CR** guarantees clearance for this location. It requires at least 25 CR and deducts the amount once.
-- **Surrender** removes one named item at the current location and forfeits its income. The officer stays until the player clears that location.
-- Clearing the fifth location completes delivery. Decisions have no timeout. An allowed inspection resolves after the officer reaches the location and scans for 0.9 s; this is presentation only and changes no odds. Each roll uses the snapshot's seeded RNG, so identical inputs reproduce the result.
+Suspicion carries between stops and is capped at 3. At 0–1, customs checks exposed goods. At 2, it opens the fixture implicated by the strongest local clue. An anomaly wins ties. At 3, it opens all local fixtures. A sealed cradle prevents a live reply and can still be opened. The inspection has no random detection rolls.
 
-## Money and consequences
+Review is untimed. Choosing to cite the manifest or surrender a local illicit item grants one eight-second hold per stop. Reach the marked docket or freight and press E, tap the marker, or use **Walk to docket/freight** (F on keyboard). A valid citation dismisses the heat clue. Surrender removes the selected item, taking its live signature with it. Ending the hold or letting it expire proceeds with the evidence still on file. The scan takes 0.9 s. Officer travel and response time use the same fixed clock as courier movement.
 
-Start with 40 CR. Lost, surrendered and impounded items earn zero. The closing balance adds delivery income to cash remaining after bribes, then subtracts repairs and applicable fees.
+## Money and outcomes
 
-| Event | Accounting |
-| --- | --- |
-| Survive with hull damage | Pay 1 CR per missing hull point. This also applies after arrest. |
-| Arrest | Forfeit remaining cargo and pay a 30 CR impound fee. |
-| Hull death | Lose the cargo and pay a flat 100 CR wreck charge. Wreck recovery replaces hull repairs. |
-| Balance below 60 CR | Show the shortfall against the syndicate reserve. This is a financial warning on the ledger. |
+The courier starts with 40 CR. Delivery pays for the surviving cargo. Voluntary surrender forfeits its payout. Discovery of the relays confiscates them and adds a 15 CR duty fine. Either can result in a partial delivery. Discovery of the cask impounds the remaining cargo and adds a 30 CR fee. Hull damage costs 1 CR per missing point unless the ship was wrecked, which costs 100 CR instead. A balance below 60 CR shows the syndicate reserve shortfall.
 
-Only settlement can take the balance below zero.
-
-## Runs and the training delivery
-
-- Each page load picks a random route seed, shown on the job ticket as a route code.
-- **Next run** (R) starts a contract on the next seed: a new schedule, impact site and rivet order.
-- **Replay this route** (T) restarts the same seed with identical hazards. Restart restores starting funds, cargo positions, condition, hull and timers.
-- First-time players start with a **training run**: the same rules, with these differences:
-  - The highway clock and hazard schedule hold.
-  - The cell and specimen stay dormant until their lessons.
-  - The surge and impact fire on cue when their lessons begin.
-  - After the breach is sealed, the clock resumes with 12 seconds to the gate.
-  - Prep, customs and settlement are normal.
-- Training completion is remembered in `localStorage`. The weekly quota, shops and later days remain future design.
+Replay restores the starting state and retains the route seed. **Next run** uses a new seed. The guided first delivery holds the highway clock through the cargo drills and scripted emergencies, then releases it with 12 s to the gate. Preparation, inspection, settlement, and recovery work as in the unguided run. Training can be skipped or replayed.
