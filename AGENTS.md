@@ -1,6 +1,6 @@
 # Project Protocol — Agent Instructions
 
-Read `docs/GAME_DESIGN.md`, `docs/MECHANICS.md`, `docs/ARCHITECTURE.md`, `docs/IMPLEMENTATION_PLAN.md`, and `docs/DEVELOPMENT_STATUS.md` before implementation. Resolve differences by treating GAME_DESIGN as product intent, MECHANICS as the authoritative initial prototype rules, and IMPLEMENTATION_PLAN as delivery order. Never silently change a confirmed design decision.
+Read `docs/HIGH_LEVEL_GAME_DESIGN_DOCUMENT.md`, `docs/MECHANICS.md`, `docs/ARCHITECTURE.md`, `docs/IMPLEMENTATION_PLAN.md`, and `docs/DEVELOPMENT_STATUS.md` before implementation. Resolve differences by treating HIGH_LEVEL_GAME_DESIGN_DOCUMENT as product intent, MECHANICS as the authoritative initial prototype rules, and IMPLEMENTATION_PLAN as delivery order. Never silently change a confirmed design decision.
 
 ## Working principles
 - Build a genuinely playable browser game, not a mockup or a series of disconnected menus.

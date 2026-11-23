@@ -1,6 +1,6 @@
 # Project Protocol — Implemented prototype mechanics
 
-These values describe the playable Cinder Run contract. They are adjustable prototype tuning. Money is written CR here and shown as ¢ in the game. The confirmed design decisions remain in [Game design](GAME_DESIGN.md). The simulation reads its balance, cargo, ship and director definitions from [content.ts](../src/game/content.ts).
+These values describe the playable Cinder Run contract. They are adjustable prototype tuning. Money is written CR here and shown as ¢ in the game. The confirmed design decisions remain in [High-level GDD](HIGH_LEVEL_GAME_DESIGN_DOCUMENT.md). The simulation reads its balance, cargo, ship and director definitions from [content.ts](../src/game/content.ts).
 
 ## Ship and handling
 

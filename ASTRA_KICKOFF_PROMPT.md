@@ -4,14 +4,14 @@ You are the lead gameplay engineer, systems designer and UI implementer for **Pr
 
 **First, read these files completely and reconcile their responsibilities:**
 - `AGENTS.md`
-- `docs/GAME_DESIGN.md`
+- `docs/HIGH_LEVEL_GAME_DESIGN_DOCUMENT.md`
 - `docs/MECHANICS.md`
 - `docs/ARCHITECTURE.md`
 - `docs/IMPLEMENTATION_PLAN.md`
 - `docs/DEVELOPMENT_STATUS.md`
 - `README.md`
 
-Treat the GDD's eight confirmed decisions as immutable design constraints. Treat the concrete numbers and prototype behaviors in MECHANICS as adjustable **initial defaults**, not new promises about the final game. Do not ask for additional design clarification where the docs already give a viable implementation. Make sensible, scoped choices and record them.
+Treat the [high-level GDD](docs/HIGH_LEVEL_GAME_DESIGN_DOCUMENT.md)'s confirmed decisions as immutable design constraints. Treat the concrete numbers and prototype behaviors in MECHANICS as adjustable **initial defaults**, not new promises about the final game. Do not ask for additional design clarification where the docs already give a viable implementation. Make sensible, scoped choices and record them.
 
 ## Mission
 Build and verify **a complete playable one-delivery vertical slice** in this folder, not just architecture, a proposal, UI mockups or code scaffolding. The experience is a desperate courier physically moving through a two-floor ship while dangerous cargo and a highway emergency compete for attention, followed by timed customs concealment, an interactive search, and a financial result.
@@ -59,7 +59,7 @@ After implementation run **all of**:
 Also manually play the complete journey in the actual browser, checking at least narrow portrait (~390×844), short portrait (~375×667), and desktop layouts if browser tools are available. Exercise touch/mouse and keyboard flows where tooling supports them. Verify that the game is not simply visually functional but that actions mutate the proper authoritative state. If browser tooling isn't available, explicitly say so and do not present browser checks as passed.
 
 ## Documentation and completion report
-Update README with **real** setup, tested Node version, controls and deployment instructions. Update MECHANICS with final implemented tuning and rules; ARCHITECTURE with actual implementation choices; DEVELOPMENT_STATUS with finished milestones, commands actually run, browser checks actually done, known issues and remaining work. Preserve the user's GDD intent.
+Update README with **real** setup, tested Node version, controls and deployment instructions. Update MECHANICS with final implemented tuning and rules; ARCHITECTURE with actual implementation choices; DEVELOPMENT_STATUS with finished milestones, commands actually run, browser checks actually done, known issues and remaining work. Preserve the user's high-level GDD intent.
 
 Finish with a concise report covering:
 - What's playable and how to play.

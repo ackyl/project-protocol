@@ -22,7 +22,7 @@ The first slice presented the ship as a 480×216 thumbnail inside a dashboard: c
 - **Inspection pacing.** Inspect resolves 0.9 s after the officer reaches the stop, so the scan is visible before the roll. The result receipt appears 1.3–2.4 s after the outcome so the consequence plays out first. Both delays are presentation-only and do not change odds, RNG order or settlement.
 - **Ladder input.** Holding W/S while walking into range starts the climb automatically. Click-to-move lines up with the rungs before climbing, so the climb never starts with a visible snap.
 - **Movement during repair.** Walking or clicking elsewhere while the console is open leaves the console, using the existing `leave` command.
-- **Shop and upgrades** stay out of scope, as in the GDD's first milestone. No new mechanics were added.
+- **Shop and upgrades** stay out of scope, as in the [high-level GDD](HIGH_LEVEL_GAME_DESIGN_DOCUMENT.md)'s first milestone. No new mechanics were added.
 
 ## Performance pass
 
@@ -174,9 +174,9 @@ The game-first redesign above replaced M4's presentation work.
   - Two seeded emergencies: a power surge with a timing lock, and a hull breach with a rivet sequence.
   - A five-stop customs search with inspect, bribe and surrender.
   - Three distinct failures (arrest, hull death, debt warning) and a ledger.
-- **Fixed by the GDD:** side view, two decks, the whole playable ship on one screen, walking and ladders with no jumping, physically carried cargo, station minigames rather than hold-to-repair, a real-time highway countdown, timed prep then an interactive search, one delivery per day, and different consequences for different failures.
+- **Fixed by the [high-level GDD](HIGH_LEVEL_GAME_DESIGN_DOCUMENT.md):** side view, two decks, the whole playable ship on one screen, walking and ladders with no jumping, physically carried cargo, station minigames rather than hold-to-repair, a real-time highway countdown, timed prep then an interactive search, one delivery per day, and different consequences for different failures.
 - **Core tension to design around:** two problems at once while the courier can be in only one place.
-- **Not built yet (GDD future scope, chunk 3):** five-day campaign and weekly syndicate quota, shop and upgrades between days, escalating director settings, music, and save.
+- **Not built yet ([high-level GDD](HIGH_LEVEL_GAME_DESIGN_DOCUMENT.md) future scope, chunk 3):** five-day campaign and weekly syndicate quota, shop and upgrades between days, escalating director settings, music, and save.
 - **Open questions worth ideating:**
   - What does the shop sell?
   - How do days escalate (new hazards, ship layouts, customs behaviour)?
